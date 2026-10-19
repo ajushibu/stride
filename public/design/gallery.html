@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stride design gallery</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  /* gallery chrome only (not part of the design system) */
+  body { background: #CBDFE0; font-family: var(--font-body); padding: 32px 24px 80px; }
+  .g-title { font-family: var(--font-display); font-weight: 800; font-size: 34px; letter-spacing: -.03em; }
+  .g-sub { color: #3b5560; margin: 4px 0 28px; }
+  .g-h { font-family: var(--font-display); font-weight: 800; font-size: 20px; margin: 44px 0 16px; letter-spacing: -.01em; }
+  .g-row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  .g-fig { margin: 0; }
+  .g-fig figcaption { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #2d4a55; margin-bottom: 10px; }
+  .frame { position: relative; width: 390px; height: 844px; overflow: hidden; transform: translateZ(0); border-radius: 40px; box-shadow: 0 0 0 10px #12171c, 0 30px 60px -20px rgba(0,0,0,.5);
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 46%, var(--bg-bot) 100%); }
+  .frame--full { height: auto; overflow: visible; }
+  .frame__scroll { height: 100%; overflow: auto; scrollbar-width: none; }
+  .frame--full .frame__scroll { height: auto; overflow: visible; }
+  .frame .screen { animation: none; }
+  .frame .screen--coach { height: 844px; }
+  .frame--full .screen--coach { height: 844px; }
+  .tile { width: 390px; padding: 20px; border-radius: 30px; background: linear-gradient(180deg, var(--bg-top), var(--bg-bot)); display: flex; flex-direction: column; gap: 16px; }
+  .tile--wide { width: 820px; }
+</style>
+</head>
+<body>
+<h1 class="g-title">Stride UI gallery</h1>
+<p class="g-sub">All components and screens, 390px design target. Light theme only. Sample data is fictional.</p>
+
+<h2 class="g-h">Screens</h2>
+<div class="g-row" id="screens"></div>
+
+<h2 class="g-h">Log run flow, sheets, modals</h2>
+<div class="g-row" id="flows"></div>
+
+<h2 class="g-h">Components</h2>
+<div class="g-row" id="comps"></div>
+
+<script src="ui.js"></script>
+<script>
+(function () {
+  var I = UI.icon;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- shared pieces ---------- */
+  function nav(active) {
+    var item = function (key, ic, label) {
+      return '<button class="nav__item" ' + (active === key ? 'aria-current="page"' : '') + '>' + I(ic) + '<span>' + label + '</span></button>';
+    };
+    return '<nav class="nav" aria-label="Main">' + item('today', 'today', 'Today') + item('plan', 'plan', 'Plan') +
+      '<button class="nav__fab" aria-label="Log run">' + I('run') + '</button>' +
+      item('insights', 'insights', 'Insights') + item('coach', 'coach', 'Coach') + '</nav>';
+  }
+  function hdr(eyebrow, title, streak) {
+    return '<header class="hdr"><div class="hdr__text"><div class="hdr__eyebrow">' + eyebrow + '</div><h1 class="hdr__title">' + title + '</h1></div>' +
+      '<div class="hdr__actions">' + (streak != null ? '<button class="streak-pill" aria-label="' + streak + ' day streak">' + UI.flame(20) + streak + '</button>' : '') +
+      '<button class="icon-btn" aria-label="Menu">' + I('menu') + '</button></div></header>';
+  }
+  function frame(id, caption, inner, navKey, full, extra) {
+    return '<figure class="g-fig"><figcaption>' + caption + '</figcaption><div class="frame app' + (full ? ' frame--full' : '') + '" id="' + id + '">' +
+      '<div class="frame__scroll">' + inner + '</div>' + (navKey ? nav(navKey) : '') + (extra || '') + '</div></figure>';
+  }
+  var shot = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 84"><rect width="64" height="84" fill="#14181e"/><circle cx="32" cy="30" r="14" fill="none" stroke="#00b58a" stroke-width="5" stroke-dasharray="60 30"/><rect x="10" y="54" width="44" height="5" rx="2.5" fill="#00b9d6"/><rect x="10" y="64" width="30" height="5" rx="2.5" fill="#d0035f"/></svg>');
+
+  /* ---------- TODAY ---------- */
+  var todayInner =
+    '<section class="screen">' + hdr('Fri 23 Oct', 'Morning, Aksh', 12) +
+    '<div class="stack--sm stack">' +
+      UI.arcGauge({ pct: 35, value: 35, unit: 'PERCENT', label: 'WEEK COMPLETE',
+        caption: '<span class="delta"><b>11.2</b> of 32 km ' + I('up', { size: 14 }) + '</span>' }) +
+    '</div>' +
+    '<div class="section-title" style="margin-top:4px">Today’s run <small>Week 3 · Base</small></div>' +
+    '<article class="card run-hero" data-type="tempo">' +
+      '<div class="run-hero__top"><span class="pill pill--type" data-type="tempo">Tempo</span><span class="label">Fri 23 Oct</span></div>' +
+      '<div class="run-hero__dist"><span class="num">8.0</span><span class="unit">km</span></div>' +
+      '<p class="run-hero__what">2 km easy, 4 km tempo, 2 km cool down</p>' +
+      '<div class="run-hero__meta">' +
+        '<div class="meta-cell"><span class="label">Target pace</span><span class="num">5:25<span class="num__unit">/km</span></span><small>tempo block</small></div>' +
+        '<div class="meta-cell"><span class="label">Heart rate</span><span class="num">Z4<span class="num__unit">162–172</span></span><small>bpm</small></div>' +
+      '</div>' +
+      '<div class="coach-note"><span class="avatar">' + I('sparkle') + '</span><p><b>Why tempo today:</b> your last two easy runs sat at 142 bpm, so there is room to push the threshold.</p></div>' +
+    '</article>' +
+    '<div class="card card--pad-sm" style="padding-top:12px;padding-bottom:12px">' +
+      UI.weekStrip([
+        { d: 'M', state: 'half', km: '5.2', label: 'Monday, 5.2 of 6 km' }, { d: 'T', state: 'rest' },
+        { d: 'W', state: 'done', km: '6.0' }, { d: 'T', state: 'rest' },
+        { d: 'F', state: 'planned', km: '8.0', today: true }, { d: 'S', state: 'rest' }, { d: 'S', state: 'planned', km: '12' }
+      ]) + '</div>' +
+    '<div class="grid-2">' +
+      '<div class="card stat-card"><div class="card__head"><span class="card__icon" style="--c:var(--mint)">' + I('run') + '</span><span class="card__title">Weekly km</span></div>' +
+        '<div class="stat-card__body stat-card__body--center">' + UI.ring({ pct: 35, pct2: 25, size: 118, stroke: 14, color: 'var(--mint)', color2: 'var(--teal)', center: '<b class="num">11.2</b><small>of 32 km</small>' }) + '</div></div>' +
+      '<div class="card stat-card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('mountain') + '</span><span class="card__title">Long run</span></div>' +
+        '<div class="stat-card__body" style="flex-direction:row;gap:14px;align-items:flex-end;justify-content:space-between">' +
+          '<div style="flex:1"><div class="stat-pair"><b class="magenta">10</b></div>' + UI.slantBar({ vertical: true, segments: 14, filled: 10, tone: 'magenta', label: 'Last long run 10 km' }) + '</div>' +
+          '<div style="flex:1"><div class="stat-pair"><b class="teal">12</b></div>' + UI.slantBar({ vertical: true, segments: 14, filled: 12, tone: 'teal', label: 'This week 12 km' }) + '</div>' +
+        '</div><div class="card__foot"><span>Last</span><span>Sat</span></div></div>' +
+    '</div>' +
+    '<div class="card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('heart') + '</span><span class="card__title">Avg heart rate</span><span class="card__meta">7 days</span></div>' +
+      '<div class="row row--between" style="align-items:flex-end"><span class="num num--lg">148<span class="num__unit">bpm</span></span>' +
+      '<div style="width:46%;padding-bottom:6px">' + UI.slantBar({ segments: 8, filled: 5, filled2: 1, tone: 'mint', size: 'md', label: 'Zone 2 share 66 percent' }) + '</div></div>' +
+      '<div class="card__foot"><span>Mostly Zone 2</span><span>Resting 52</span></div></div>' +
+    '<button class="btn btn--primary btn--block">' + I('run', { size: 22 }) + 'Log this run</button>' +
+    '</section>';
+  var foldInner = todayInner;
+
+  /* ---------- PLAN ---------- */
+  function session(t, d, km) { return '<span class="session" data-type="' + t + '"><span class="session__d">' + d + '</span><b>' + km + '</b></span>'; }
+  function weekRow(cls, wk, km, sessions, tag) {
+    return '<div class="week-row ' + cls + '">' + (tag ? '<span class="week-row__tag">' + tag + '</span>' : '') +
+      '<div class="week-row__lead"><span class="week-row__wk">Wk ' + wk + '</span><span class="week-row__km">' + km + '<small>km</small></span></div>' +
+      '<div class="week-row__sessions">' + sessions + '</div></div>';
+  }
+  var planInner =
+    '<section class="screen">' + hdr('Melbourne Marathon', 'Your plan') +
+    '<article class="card countdown">' +
+      '<div class="countdown__top"><div><span class="label">Race day · 10 Oct 2027</span><div class="countdown__days" style="margin-top:8px"><span class="num">356</span><span>days</span></div></div>' +
+      '<div class="countdown__target"><span class="label">Target</span><div class="num">4:15:00</div><span class="muted" style="font-size:13px">6:03 /km</span></div></div>' +
+      '<div class="countdown__bar">' + UI.slantBar({ segments: 20, filled: 1, filled2: 0, tone: 'green', size: 'md', label: 'Week 3 of 51' }) +
+      '<div class="countdown__scale"><span class="label">Week 3</span><span class="label">of 51</span></div></div>' +
+    '</article>' +
+    '<div class="phase" data-phase="base"><div class="phase__head"><span class="phase__dot"></span><span class="phase__name">Base</span><span class="phase__range">Wk 1–12</span><span class="phase__km">240 km</span></div>' +
+      weekRow('is-done', 1, 20, session('easy', 'T', 6) + session('easy', 'T', 6) + session('long', 'S', 8)) +
+      weekRow('is-done', 2, 24, session('easy', 'T', 6) + session('tempo', 'T', 6) + session('long', 'S', 12)) +
+      weekRow('is-current', 3, 32, session('easy', 'M', 6) + session('easy', 'W', 6) + session('tempo', 'F', 8) + session('long', 'S', 12), 'This week') +
+      weekRow('', 4, 26, session('easy', 'T', 6) + session('easy', 'T', 6) + session('long', 'S', 14)) +
+    '</div>' +
+    '<div class="phase" data-phase="build"><div class="phase__head"><span class="phase__dot"></span><span class="phase__name">Build</span><span class="phase__range">Wk 13–30</span><span class="phase__km">820 km</span></div>' +
+      weekRow('', 13, 38, session('easy', 'T', 8) + session('tempo', 'T', 8) + session('easy', 'F', 6) + session('long', 'S', 16)) +
+      weekRow('', 14, 40, session('easy', 'T', 8) + session('intervals', 'T', 8) + session('easy', 'F', 6) + session('long', 'S', 18)) +
+    '</div>' +
+    '<div class="phase" data-phase="peak"><div class="phase__head"><span class="phase__dot"></span><span class="phase__name">Peak</span><span class="phase__range">Wk 31–44</span><span class="phase__km">690 km</span></div>' +
+      weekRow('', 38, 64, session('easy', 'T', 10) + session('tempo', 'T', 14) + session('recovery', 'F', 8) + session('long', 'S', 32)) +
+    '</div>' +
+    '<div class="phase" data-phase="taper"><div class="phase__head"><span class="phase__dot"></span><span class="phase__name">Taper</span><span class="phase__range">Wk 45–51</span><span class="phase__km">210 km</span></div>' +
+      weekRow('', 50, 28, session('easy', 'T', 6) + session('tempo', 'T', 6) + session('easy', 'F', 4) + session('long', 'S', 12)) +
+    '</div></section>';
+
+  /* ---------- INSIGHTS ---------- */
+  function mmss(v) { var m = Math.floor(v), s = Math.round((v - m) * 60); if (s === 60) { m++; s = 0; } return m + ':' + (s < 10 ? '0' : '') + s; }
+  var insightsInner =
+    '<section class="screen">' + hdr('Together for 12 days', 'Insights') +
+    '<article class="card card--pad-lg" style="padding-bottom:20px">' + UI.arcGauge({ variant: 'dash', pct: 75, value: 75, status: 'THRIVING', label: 'RACE READINESS' }) +
+      '<div class="trio" style="margin-top:8px">' +
+        '<div class="trio__item trio__item--gold"><span class="trio__badge">' + I('trophy') + '</span><span class="trio__num">18</span><span class="trio__unit">days</span><span class="trio__label">Best streak</span></div>' +
+        '<div class="trio__item trio__item--violet"><span class="trio__badge">' + I('run') + '</span><span class="trio__num">47</span><span class="trio__unit">runs</span><span class="trio__label">Total runs</span></div>' +
+        '<div class="trio__item trio__item--flame"><span class="trio__badge">' + UI.flame(20) + '</span><span class="trio__num">12</span><span class="trio__unit">days</span><span class="trio__label">Current streak</span></div>' +
+      '</div></article>' +
+    '<div class="section-title">Weekly <small>last 8 weeks</small></div>' +
+    '<article class="card card--cream"><div class="row row--between"><div><span class="label">Your week</span><div class="num num--md" style="margin-top:6px;font-size:24px">Oct 19 – 25</div><div class="muted" style="font-size:13px;margin-top:4px">Tap to open recap</div></div>' +
+      '<span class="num num--lg">11.2<span class="num__unit">km</span></span></div>' +
+      '<div style="margin-top:18px">' + UI.weekBars({ max: 40, step: 5, items: [
+        { label: 'W-7', value: 18, plan: 20 }, { label: 'W-6', value: 20, plan: 20 }, { label: 'W-5', value: 22, plan: 24 }, { label: 'W-4', value: 24, plan: 24 },
+        { label: 'W-3', value: 26, plan: 26 }, { label: 'W-2', value: 28, plan: 28, state: 'peak' }, { label: 'W-1', value: 30, plan: 30 }, { label: 'Now', value: 11, plan: 32, state: 'current' }] }) + '</div></article>' +
+    '<article class="card chart-card"><div class="chart-card__head"><div><span class="label">Avg pace</span><div class="chart-card__value"><span class="num">6:08</span><span class="muted">/km</span></div></div><span class="delta delta--up"><b>-0:21</b> faster</span></div>' +
+      UI.lineChart({ data: [6.62, 6.55, 6.5, 6.4, 6.35, 6.22, 6.18, 6.13], labels: ['W1', '', 'W3', '', 'W5', '', 'W7', 'W8'], color: 'var(--teal)', invert: true, min: 6, max: 6.8, fmt: mmss, ticks: 3, ariaLabel: 'Average pace by week, improving' }) + '</article>' +
+    '<article class="card chart-card"><div class="chart-card__head"><div><span class="label">Avg heart rate</span><div class="chart-card__value"><span class="num">148</span><span class="muted">bpm</span></div></div><span class="delta delta--up"><b>-4</b> bpm</span></div>' +
+      UI.lineChart({ data: [158, 156, 157, 153, 152, 150, 149, 148], labels: ['W1', '', 'W3', '', 'W5', '', 'W7', 'W8'], color: 'var(--magenta)', min: 145, max: 160, ticks: 3, ariaLabel: 'Average heart rate by week, falling' }) + '</article>' +
+    '<article class="card"><div class="card__head"><span class="card__icon" style="--c:var(--mint)">' + I('mountain') + '</span><span class="card__title">Long run progression</span><span class="card__meta">goal 32 km</span></div><div class="stack stack--sm">' +
+      [['Wk 1', 8, 32], ['Wk 2', 12, 32], ['Wk 3', 10, 32], ['Wk 4', 14, 32]].map(function (r, i) {
+        return '<div class="bar-row' + (i === 3 ? ' is-current' : '') + '"><span class="bar-row__lbl">' + r[0] + '</span>' + UI.slantBar({ segments: 16, filled: Math.round(r[1] / r[2] * 16), tone: i === 3 ? 'teal' : 'mint', size: 'sm', label: r[1] + ' of ' + r[2] + ' km' }) + '<span class="bar-row__val">' + r[1] + ' km</span></div>';
+      }).join('') + '</div></article>' +
+    '</section>';
+
+  /* ---------- COACH ---------- */
+  var coachInner =
+    '<section class="screen screen--coach">' + hdr('Your coach', 'Coach') +
+    '<div class="chat">' +
+      '<span class="pill chat__day">Today</span>' +
+      '<div class="bubble-row"><span class="avatar avatar--sm">' + I('sparkle') + '</span><div class="bubble"><p>Nice work on Wednesday. Your pace held at 6:10 with heart rate 4 bpm lower than last week.</p><p>That is a good sign. I moved <b>Friday</b> to a tempo run.</p><span class="bubble__meta">Coach · 9:02</span></div></div>' +
+      '<div class="bubble-row bubble-row--user"><div class="bubble bubble--user">My left calf felt tight at the end. Should I still run tempo?<span class="bubble__meta">9:04</span></div></div>' +
+      '<div class="bubble-row bubble-row--user"><div class="bubble bubble--user"><div class="bubble__attach"><span class="thumb">' + I('image', { size: 18 }) + '</span>wed-run.png</div><span class="bubble__meta">9:04</span></div></div>' +
+      '<div class="bubble-row"><span class="avatar avatar--sm">' + I('sparkle') + '</span><div class="bubble bubble--typing" aria-label="Coach is typing"><i></i><i></i><i></i></div></div>' +
+    '</div>' +
+    '<div class="chips" role="group" aria-label="Suggested replies"><button class="chip">Swap to easy 6 km</button><button class="chip">Calf feels fine now</button><button class="chip">Move to Saturday</button></div>' +
+    '<div class="composer"><button class="icon-btn" aria-label="Attach screenshot">' + I('clip') + '</button>' +
+      '<label class="composer__field"><span class="sr-only">Message</span><input class="composer__input" placeholder="Ask your coach…"></label>' +
+      '<button class="icon-btn icon-btn--green" aria-label="Send">' + I('send') + '</button></div>' +
+    '</section>';
+
+  /* ---------- screens row ---------- */
+  $('screens').innerHTML =
+    frame('f-today', 'Today (full length)', todayInner, 'today', true) +
+    frame('f-today-fold', 'Today (first viewport 390x844)', foldInner, 'today', false) +
+    frame('f-plan', 'Plan', planInner, 'plan', true) +
+    frame('f-insights', 'Insights', insightsInner, 'insights', true) +
+    frame('f-coach', 'Coach', coachInner, 'coach', false);
+
+  /* ---------- FLOWS ---------- */
+  var behind = '<section class="screen" aria-hidden="true">' + hdr('Fri 23 Oct', 'Morning, Aksh', 12) + UI.arcGauge({ pct: 35, value: 35, unit: 'PERCENT', label: 'WEEK COMPLETE' }) + '<div class="card" style="height:220px"></div></section>';
+  function overlaySheet(inner, title, sub, step) {
+    return '<div class="overlay is-open" role="dialog" aria-modal="true" aria-label="' + title + '"><div class="backdrop"></div><div class="sheet"><div class="sheet__grab"></div>' +
+      '<div class="sheet__head"><div><h2 class="sheet__title">' + title + '</h2>' + (sub ? '<p class="sheet__sub">' + sub + '</p>' : '') + '</div><button class="icon-btn" aria-label="Close">' + I('close') + '</button></div>' +
+      (step ? '<div class="stepper" aria-label="Step ' + step + ' of 3">' + [1, 2, 3].map(function (n) { return '<i class="' + (n <= step ? 'is-on' : '') + '"></i>'; }).join('') + '</div>' : '') + inner + '</div></div>';
+  }
+  function fieldCard(label, val, unit, cls, wide) {
+    return '<label class="field-card' + (cls ? ' ' + cls : '') + (wide ? ' field-card--wide' : '') + '"><span class="label">' + label + '</span><span class="field-card__row"><input class="field-card__input" value="' + val + '" inputmode="decimal">' + (unit ? '<span class="field-card__unit">' + unit + '</span>' : '') + '</span></label>';
+  }
+  var dropSheet = overlaySheet(
+    '<div class="sheet__body"><label class="dropzone"><input type="file" accept="image/*"><span class="dropzone__icon">' + I('upload') + '</span><span class="dropzone__title">Drop your watch screenshot</span><span class="dropzone__hint">Or tap to choose from your photos. PNG or JPG.</span></label></div>' +
+    '<div class="sheet__foot"><button class="btn btn--primary btn--block" disabled>Read screenshot</button><button class="btn btn--text">Enter run manually</button></div>',
+    'Log your run', 'Upload the summary screen from your watch.', 1);
+  var previewSheet = overlaySheet(
+    '<div class="sheet__body"><div class="preview"><img class="preview__img" alt="Screenshot preview" src="' + shot + '"><div class="preview__info"><div class="preview__name">IMG_4821.PNG</div><div class="preview__size">1.2 MB · ready</div></div><button class="icon-btn icon-btn--bare" aria-label="Remove">' + I('close') + '</button></div>' +
+    '<label class="dropzone is-over" style="min-height:120px"><input type="file" accept="image/*" multiple><span class="dropzone__title" style="font-size:16px">Add another screenshot</span><span class="dropzone__hint">Splits or heart-rate screens</span></label></div>' +
+    '<div class="sheet__foot"><button class="btn btn--primary btn--block">Read screenshot</button><button class="btn btn--text">Cancel</button></div>',
+    'Log your run', 'One screenshot attached.', 1);
+  var scanSheet = overlaySheet('<div class="scan"><div class="spinner" role="status" aria-label="Reading"></div><div><div class="empty__title" style="font-size:20px">Reading your screenshot</div><p class="muted" style="margin-top:4px">Pulling distance, pace and heart rate.</p></div>' +
+    '<div class="stack stack--sm" style="width:100%"><div class="skeleton skeleton--card" style="height:72px"></div><div class="skeleton skeleton--card" style="height:72px"></div></div></div>', 'Log your run', '', 2);
+  var confirmSheet = overlaySheet(
+    '<div class="sheet__body"><div class="field-grid">' +
+      fieldCard('Distance', '8.02', 'km', 'is-edited') + fieldCard('Time', '44:10', 'min') +
+      fieldCard('Avg pace', '5:30', '/km') + fieldCard('Avg HR', '161', 'bpm') +
+      fieldCard('Max HR', '178', 'bpm') + fieldCard('Cadence', '174', 'spm', 'is-warn') +
+      fieldCard('Calories', '612', 'kcal') + fieldCard('Date', '23 Oct', '') + '</div></div>' +
+    '<div class="sheet__foot"><button class="btn btn--primary btn--block">Confirm &amp; update plan</button><button class="btn btn--text">Back</button></div>',
+    'Check the numbers', 'Tap any card to fix it.', 3);
+  var resultModal = '<div class="overlay overlay--modal is-open" role="dialog" aria-modal="true" aria-label="Run logged"><div class="backdrop"></div><div class="modal modal--wide"><div class="confetti"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
+    '<div class="modal__icon">' + UI.flame(64) + '</div><h2 class="modal__title" style="text-align:center"><span class="num">13</span> Day Streak</h2>' +
+    '<p class="modal__text" style="text-align:center;margin-left:auto;margin-right:auto">Tempo nailed. Here is what your coach changed.</p>' +
+    '<ul class="change-list">' +
+      '<li class="change" style="--c:var(--mint)"><span class="change__icon">' + I('up') + '</span><div><div class="change__t">Saturday long run</div><div class="change__s">Raised because HR stayed low</div></div><span class="change__delta">12 → 14 km</span></li>' +
+      '<li class="change" style="--c:var(--teal-700)"><span class="change__icon">' + I('pace') + '</span><div><div class="change__t">Easy pace</div><div class="change__s">You are fitter than planned</div></div><span class="change__delta">6:30 → 6:20</span></li>' +
+      '<li class="change" style="--c:var(--magenta)"><span class="change__icon">' + I('flag') + '</span><div><div class="change__t">Race readiness</div><div class="change__s">Up from last week</div></div><span class="change__delta">+3</span></li>' +
+    '</ul><button class="btn btn--primary">Let’s go</button></div></div>';
+  var streakModal = '<div class="overlay overlay--modal is-open" role="dialog" aria-modal="true" aria-label="Streak"><div class="backdrop"></div><div class="modal"><div class="modal__icon">' + UI.flame(64) + '</div><h2 class="modal__title"><span class="num">12</span> Day Streak</h2><p class="modal__text">Keep the streak alive. Log at least one run or rest day each day.</p><button class="btn btn--primary">Let’s go</button></div></div>';
+  var settingsSheet = overlaySheet(
+    '<div class="sheet__body">' +
+    '<div class="field-row" style="grid-template-columns:1fr"><div class="field"><label class="field__label" for="s1">Race date</label><input id="s1" class="input" type="date" value="2027-10-10"></div>' +
+    '<div class="field"><label class="field__label">Target time</label><div class="row" style="gap:6px"><input class="input input--time" value="4" aria-label="hours"><b>:</b><input class="input input--time" value="15" aria-label="minutes"><b>:</b><input class="input input--time" value="00" aria-label="seconds"></div></div></div>' +
+    '<div class="field-row"><div class="field"><label class="field__label" for="s2">Age</label><input id="s2" class="input" value="27" inputmode="numeric"></div><div class="field"><label class="field__label" for="s3">Runs per week</label><select id="s3" class="select"><option>3</option><option>4</option><option>5</option></select></div></div>' +
+    '<div class="field"><label class="field__label" for="s4">Anthropic API key</label><input id="s4" class="input" type="password" placeholder="Paste your key"><span class="field__hint">Stored on your device only.</span></div>' +
+    '<div class="field"><label class="field__label" for="s5">Notes for your coach</label><textarea id="s5" class="textarea" placeholder="Injuries, schedule, goals…"></textarea></div>' +
+    '<label class="toggle"><span><b style="font-weight:600">Weekly recap reminder</b><br><span class="field__hint">Sunday evening</span></span><input type="checkbox" checked><span class="toggle__track"></span></label></div>' +
+    '<div class="sheet__foot"><button class="btn btn--primary btn--block">Save</button></div>', 'Settings', 'Race, profile and coach.');
+  var toastEx = '<div class="toast-wrap"><div class="toast" role="status"><span class="toast__icon">' + I('check') + '</span>Plan updated</div></div>';
+
+  $('flows').innerHTML =
+    frame('f-drop', 'Log 1 · upload', behind, null, false, dropSheet) +
+    frame('f-preview', 'Log 1b · preview', behind, null, false, previewSheet) +
+    frame('f-scan', 'Log 2 · reading (loading)', behind, null, false, scanSheet) +
+    frame('f-confirm', 'Log 3 · confirm fields', behind, null, false, confirmSheet) +
+    frame('f-result', 'Log 4 · result modal', behind, null, false, resultModal) +
+    frame('f-streak', 'Streak modal', behind, null, false, streakModal) +
+    frame('f-settings', 'Settings sheet', behind, null, false, settingsSheet + toastEx);
+
+  /* ---------- COMPONENTS ---------- */
+  var emptyArt = '<svg class="empty__art" viewBox="0 0 120 70" aria-hidden="true">' + (function () {
+    var s = ''; for (var i = 0; i < 13; i++) { var a = (-100 + i * 200 / 12) * Math.PI / 180; var x = 60 + 48 * Math.sin(a), y = 62 - 48 * Math.cos(a);
+      s += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="' + (i < 4 ? 'var(--mint)' : 'var(--track)') + '"/>'; } return s; })() + '</svg>';
+  $('comps').innerHTML =
+    '<div class="tile"><span class="label">Buttons</span>' +
+      '<button class="btn btn--primary btn--block">Log this run</button><div class="row"><button class="btn btn--secondary">Secondary</button><button class="btn btn--soft">Soft</button></div>' +
+      '<div class="row"><button class="btn btn--ghost">Ghost</button><button class="btn btn--text">Text</button><button class="icon-btn" aria-label="Menu">' + I('menu') + '</button><button class="icon-btn icon-btn--green" aria-label="Add">' + I('plus') + '</button><button class="icon-btn icon-btn--ink" aria-label="Close">' + I('close') + '</button></div>' +
+      '<div class="row"><button class="btn btn--primary btn--sm">Small</button><button class="btn btn--primary" disabled>Disabled</button></div>' +
+      '<span class="label">Streak pill, pills, delta</span><div class="row" style="flex-wrap:wrap"><button class="streak-pill">' + UI.flame(20) + '12</button><span class="pill pill--type" data-type="easy">Easy</span><span class="pill pill--type" data-type="tempo">Tempo</span><span class="pill pill--type" data-type="long">Long</span><span class="pill pill--type" data-type="intervals">Intervals</span><span class="pill pill--type" data-type="recovery">Recovery</span><span class="pill pill--ok">On track</span><span class="pill pill--warn">Watch</span><span class="pill pill--bad">Missed</span><span class="delta"><b>87%</b> yesterday</span></div>' +
+      '<span class="label">Segmented tabs</span><div class="seg" role="tablist"><button class="seg__btn" role="tab" aria-selected="true">Week</button><button class="seg__btn" role="tab" aria-selected="false">Month</button><button class="seg__btn" role="tab" aria-selected="false">Plan</button></div></div>' +
+    '<div class="tile"><span class="label">Gauges (dots, ring, dash)</span>' +
+      '<div class="card">' + UI.arcGauge({ pct: 29, pct2: 30, value: 29, unit: 'PERCENT', label: 'WEEK COMPLETE' }) + '</div>' +
+      '<div class="card"><div class="row" style="justify-content:space-around">' + UI.ring({ pct: 62, pct2: 14, size: 96, center: '<b class="num">62</b><small>km</small>' }) + UI.ring({ pct: 100, size: 96, stroke: 10, color: 'var(--green)', center: '<b class="num">100</b><small>done</small>' }) + UI.ring({ pct: 20, size: 96, color: 'var(--magenta)', center: '<b class="num">20</b>' }) + '</div></div>' +
+      '<div class="card"><span class="label">Slanted bars</span><div class="stack stack--sm" style="margin-top:12px">' + UI.slantBar({ segments: 12, filled: 7, filled2: 3, size: 'lg' }) + UI.slantBar({ segments: 12, filled: 4, tone: 'teal' }) + UI.slantBar({ segments: 12, filled: 9, tone: 'magenta', size: 'sm' }) + '</div></div></div>' +
+    '<div class="tile"><span class="label">Half dots, week strip, trio</span>' +
+      '<div class="card"><div class="row" style="gap:14px">' + UI.halfDot() + UI.halfDot({ left: 'var(--mint)', right: 'var(--teal)' }) + UI.halfDot({ left: 'var(--magenta)', right: 'var(--track)', size: 40 }) + UI.halfDot({ left: 'var(--violet)', right: 'var(--gold)', size: 22 }) + '</div></div>' +
+      '<div class="card">' + UI.weekStrip([{ d: 'M', state: 'done', km: '6' }, { d: 'T', state: 'half' }, { d: 'W', state: 'missed' }, { d: 'T', state: 'rest' }, { d: 'F', state: 'planned', today: true }, { d: 'S', state: 'planned' }, { d: 'S', state: 'rest' }]) + '</div>' +
+      '<div class="card"><div class="trio"><div class="trio__item trio__item--gold"><span class="trio__badge">' + I('trophy') + '</span><span class="trio__num">18</span><span class="trio__unit">days</span><span class="trio__label">Best streak</span></div><div class="trio__item trio__item--violet"><span class="trio__badge">' + I('run') + '</span><span class="trio__num">47</span><span class="trio__unit">runs</span><span class="trio__label">Total runs</span></div><div class="trio__item trio__item--flame"><span class="trio__badge">' + UI.flame(20) + '</span><span class="trio__num">12</span><span class="trio__unit">days</span><span class="trio__label">Current</span></div></div></div>' +
+      '<div class="card card--cream"><span class="label">Card variants</span><p style="margin-top:6px">Cream card</p></div><div class="card card--tint-teal">Tint teal</div><div class="card card--tint-magenta">Tint magenta</div><div class="card card--flat">Flat card</div></div>' +
+    '<div class="tile"><span class="label">Forms</span>' +
+      '<div class="field"><label class="field__label" for="c1">Race name</label><input id="c1" class="input" value="Melbourne Marathon"></div>' +
+      '<div class="field"><label class="field__label" for="c2">Distance</label><select id="c2" class="select"><option>Marathon 42.2 km</option></select></div>' +
+      '<div class="field"><label class="field__label" for="c3">With placeholder</label><input id="c3" class="input" placeholder="e.g. 4:15:00"></div>' +
+      '<label class="toggle"><span>Notifications</span><input type="checkbox"><span class="toggle__track"></span></label>' +
+      '<span class="label">Toast variants</span><div class="toast" style="animation:none"><span class="toast__icon">' + I('check') + '</span>Run logged</div>' +
+      '<div class="toast toast--warn" style="animation:none"><span class="toast__icon">' + I('alert') + '</span>Low confidence on cadence</div>' +
+      '<div class="toast toast--error" style="animation:none"><span class="toast__icon">' + I('close') + '</span>Could not reach coach</div></div>' +
+    '<div class="tile"><span class="label">Skeleton</span><div class="card"><div class="row"><div class="skeleton skeleton--circle"></div><div class="stack--sm stack" style="flex:1"><div class="skeleton skeleton--line w-60"></div><div class="skeleton skeleton--line"></div><div class="skeleton skeleton--line w-40"></div></div></div></div><div class="skeleton skeleton--card"></div>' +
+      '<span class="label">Empty state</span><div class="card"><div class="empty">' + emptyArt + '<h3 class="empty__title">No runs yet</h3><p class="empty__text">Upload a watch screenshot and your coach will build this week.</p><button class="btn btn--primary">' + I('run', { size: 20 }) + 'Log first run</button></div></div></div>' +
+    '<div class="tile"><span class="label">Chat bits</span>' +
+      '<div class="bubble-row"><span class="avatar avatar--sm">' + I('sparkle') + '</span><div class="bubble">Coach bubble.<span class="bubble__meta">Coach · 9:02</span></div></div><div class="bubble-row bubble-row--user"><div class="bubble bubble--user">User bubble</div></div>' +
+      '<div class="bubble-row"><span class="avatar avatar--sm">' + I('sparkle') + '</span><div class="bubble bubble--typing"><i></i><i></i><i></i></div></div>' +
+      '<div class="chips"><button class="chip">Suggested</button><button class="chip is-selected">Selected</button><button class="chip">Another reply</button></div>' +
+      '<div class="composer" style="padding-bottom:0"><button class="icon-btn" aria-label="Attach">' + I('clip') + '</button><label class="composer__field"><input class="composer__input" placeholder="Ask your coach…" aria-label="Message"></label><button class="icon-btn icon-btn--green" aria-label="Send">' + I('send') + '</button></div></div>' +
+    '<div class="tile"><span class="label">Icons</span><div class="row" style="flex-wrap:wrap;gap:14px;color:var(--ink)">' +
+      ['menu', 'today', 'plan', 'insights', 'coach', 'plus', 'run', 'upload', 'image', 'send', 'clip', 'close', 'check', 'chev-r', 'sliders', 'bolt', 'heart', 'clock', 'pace', 'down', 'up', 'sparkle', 'trophy', 'edit', 'flag', 'info', 'alert', 'key', 'user', 'refresh', 'mountain', 'lock'].map(function (n) { return I(n, { size: 26 }); }).join('') + UI.flame(26) + '</div></div>';
+
+  /* ?theme hook for screenshot tooling: nothing here */
+})();
+</script>
+</body>
+</html>

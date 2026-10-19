@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E4ECEC">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Stride</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <section class="screen" id="screen-today" hidden></section>
+  <section class="screen" id="screen-plan" hidden></section>
+  <section class="screen" id="screen-insights" hidden></section>
+  <section class="screen screen--coach" id="screen-coach" hidden></section>
+
+  <nav class="nav" aria-label="Main" id="nav"></nav>
+  <div class="toast-wrap" id="toasts"></div>
+
+  <div class="overlay" id="ov-log" role="dialog" aria-modal="true" aria-label="Log your run"><div class="backdrop" data-close></div><div class="sheet" id="log-sheet"></div></div>
+  <div class="overlay" id="ov-session" role="dialog" aria-modal="true" aria-label="Session details"><div class="backdrop" data-close></div><div class="sheet" id="session-sheet"></div></div>
+  <div class="overlay" id="ov-settings" role="dialog" aria-modal="true" aria-label="Settings"><div class="backdrop" data-close></div><div class="sheet" id="settings-sheet"></div></div>
+  <div class="overlay overlay--modal" id="ov-result" role="dialog" aria-modal="true" aria-label="Run reviewed"><div class="backdrop" data-close></div><div class="modal modal--wide" id="result-modal"></div></div>
+  <div class="overlay overlay--modal" id="ov-pass" role="dialog" aria-modal="true" aria-label="Passcode"><div class="backdrop"></div><div class="modal" id="pass-modal"></div></div>
+</div>
+<script src="design/ui.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

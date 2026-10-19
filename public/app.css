@@ -1,0 +1,40 @@
+/* App-level additions on top of the designer's styles.css. Uses only the designer's tokens. */
+[hidden] { display: none !important; }
+.session { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.session.is-done { opacity: .5; }
+.session.is-skipped { opacity: .35; text-decoration: line-through; }
+.week-row { cursor: default; }
+.hint { color: var(--muted, #64727f); font-size: 14px; line-height: 1.45; }
+.note-card { display: flex; gap: 12px; align-items: flex-start; }
+.note-card p { margin: 0; font-size: 15px; line-height: 1.45; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.kv > div { display: flex; flex-direction: column; gap: 2px; }
+.kv b { font-family: var(--font-display, inherit); font-weight: 800; font-size: 20px; }
+.kv span { font-size: 12px; color: var(--muted, #64727f); }
+.detail-list { display: grid; gap: 10px; margin: 6px 0 4px; }
+.detail-list > div { display: flex; justify-content: space-between; gap: 16px; font-size: 15px; }
+.detail-list > div > span:first-child { color: var(--muted, #64727f); }
+.sheet__foot .btn + .btn { margin-top: 6px; }
+.bubble p + p { margin-top: 8px; }
+.bubble .applied { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(26,35,44,.12); font-size: 13px; }
+.bubble .applied div { margin-top: 3px; }
+.banner { padding: 12px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4; background: #FFF3D6; color: #6B4A00; }
+.banner--error { background: #FDE3EA; color: #8A0A3A; }
+.file-hidden { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+
+.week-row__km { font-size: 26px; }
+.chart-card .hint { padding: 16px !important; margin-top: 4px; text-align: center; border-radius: var(--r-md); border: 1.5px dashed var(--line-strong); background: var(--surface-2); }
+.kv { padding-top: 14px; border-top: 1px solid var(--line); }
+.week-row__ms { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--line, rgba(26,35,44,.12)); font-weight: 600; font-size: 14px; color: var(--ink-2, #3a4650); }
+.week-row__ms svg { color: var(--violet, #5A1FD1); flex: none; }
+
+.modal { text-align: center; }
+.modal__title { justify-content: center; text-align: center; }
+.change-list { text-align: left; }
+
+.screen--coach .composer { margin-bottom: 16px; }
+
+.phase__head { cursor: pointer; -webkit-tap-highlight-color: transparent; min-height: 44px; }
+.phase__chev { display: inline-flex; margin-left: 4px; color: var(--ink-3, #64727f); transition: transform .2s; }
+.phase.is-collapsed .phase__chev { transform: rotate(-90deg); }
+.phase.is-collapsed > .week-row { display: none; }
