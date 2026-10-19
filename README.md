@@ -2,51 +2,75 @@
 
 A marathon training app for your phone with a Claude-powered coach.
 
-- **Today** shows what to run, the target pace and heart-rate limit, and why.
-- **Plan** is a 51-week plan to race day (Base, Build, Peak, Taper) with a 10K test and a half-marathon test along the way.
-- **Insights** has race readiness, streaks, weekly distance, and pace and heart-rate trends.
-- **Coach** is a chat where you can say "my calf is sore" or "I'm travelling Thursday" and the plan adjusts.
-- **Log run**: upload a screenshot of your Galaxy Watch run summary. Claude reads the numbers, you confirm or fix them, and the coach reviews the run and adjusts the next few weeks.
+- **Today**: what to run, target pace and heart-rate limit, and why.
+- **Plan**: a 51-week plan to race day (Base, Build, Peak, Taper) with a 10K test and a half-marathon test.
+- **Insights**: race readiness, streaks, weekly distance, pace and heart-rate trends.
+- **Coach**: chat. Say "my calf is sore" or "I'm travelling Thursday" and the plan adjusts.
+- **Log run**: upload a Galaxy Watch run screenshot. Claude reads the numbers, you confirm, the coach reviews the run and adjusts the next few weeks.
 
-## Run it
+## Deploy (Vercel + Supabase, both free tiers)
 
-You need Node 20 or newer and an Anthropic API key.
+Same setup as Margin and Recall. The data lives in Supabase (one private row per user), the app and API run on Vercel.
+
+**1. Supabase** (you can reuse the Margin project)
+- SQL Editor, New query, paste `supabase/schema.sql`, Run. It only adds a `stride_state` table.
+- Project Settings, API Keys: copy the **Project URL** and the **Publishable key**.
+- Sign in with your existing account (same email as `ALLOWED_EMAIL`). If you ever need a new account, create it under Authentication, Users.
+
+**2. Vercel**
+- Add New, Project, import `ajushibu/stride`. Leave all build settings alone.
+- Environment Variables (copy from Margin's project where you can):
+
+| Name | What |
+|---|---|
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | Publishable key. Safe to expose, row-level security does the locking |
+| `ANTHROPIC_API_KEY` | Claude API key. Server only |
+| `ALLOWED_EMAIL` | The one account allowed in |
+
+- Deploy. Vercel only reads environment variables at deploy time, so after changing one, redeploy.
+
+**3. Install**
+- Open the Vercel URL on your phone and sign in. On iPhone/iPad: Safari, Share, Add to Home Screen. On Android: Chrome menu, Install app.
+
+**Updating later:** `git add -A && git commit -m "what changed" && git push`. Vercel redeploys in about a minute.
+
+## Run locally
 
 ```bash
 npm install
-cp .env.example .env      # then put your key in .env
-npm start
+cp .env.example .env
+npm start            # http://localhost:3000
 ```
 
-Open http://localhost:3000. Your data is saved in `data/store.json`.
+With `SUPABASE_URL` unset, the app runs in file mode: data in `data/store.json`, no sign-in (set `APP_PASSCODE` to protect it). With the Supabase variables set it behaves exactly like the deployed version.
 
-Without an API key the app still works: plans, logging runs by hand and basic offline feedback. Screenshot reading, AI plan adjustments and chat need the key.
-
-## Use it on your phone
-
-Option A, same Wi-Fi: open `http://<your-computer-ip>:3000` on the phone. It works as a website, but "Add to Home Screen" install and offline mode need HTTPS.
-
-Option B, host it (recommended): deploy this folder to any Node host (Render, Railway, Fly.io, a small VPS). Set `ANTHROPIC_API_KEY` and `APP_PASSCODE` as environment variables, and put `data/` on a persistent disk or volume or your history is lost on redeploy. Once it is served over HTTPS, open it in Chrome on your phone and choose Add to Home Screen.
-
-Always set `APP_PASSCODE` on a public deployment, otherwise anyone with the link can spend your API credits.
+Without `ANTHROPIC_API_KEY` the app still works with manual run entry and basic offline feedback. Screenshot reading, AI plan changes and chat need the key.
 
 ## Settings worth checking on day one
 
-- **Race date**: set to Sunday 10 Oct 2027 as an expected date. Confirm it against the official Melbourne Marathon Festival date once published, then use "Rebuild the weeks ahead".
+- **Race date**: set to Sunday 10 Oct 2027 as an expected date. Confirm it once the official date is published, then use "Rebuild the weeks ahead".
 - **Target time**: 4:30. Race a 10K around week 16 (February) and let that result decide whether to aim faster or slower.
-- **Easy HR cap**: 142 bpm. Your 10 km at about 150 bpm was too hard for an easy run. Check your max heart rate if you know it.
-- **Time zone**: matters for "today". Change it when you travel.
+- **Easy HR cap**: 142 bpm. A 10 km run at about 150 bpm is too hard for an easy run.
+- **Time zone**: decides what "today" is. Change it when you travel.
 
 ## How the coach stays safe
 
-The AI proposes changes and the server checks them before saving anything. It can only edit sessions in the next 21 days, never in the past, can cut a run by up to 35% but add at most 15%, cannot move race day, and pace and heart-rate recalibrations are range-checked. Injury or pain warnings are shown to you as flags. It is not a doctor.
+The AI proposes changes and the server checks them before saving. It can only edit sessions in the next 21 days, never past ones, can cut a run by up to 35% but add at most 15%, cannot move race day, and pace and heart-rate recalibrations are range-checked. Pain or injury warnings are shown as flags. It is not a doctor.
 
-## Project layout
+## Notes and limits
+
+- Screenshots are shrunk in the browser before upload because Vercel functions accept requests up to about 4.5 MB.
+- The whole training state is one JSON row, last write wins. Fine for one person, but if you use two devices at the exact same moment the later save overwrites the earlier one.
+- Supabase pauses free projects after about a week with no traffic. Opening the app wakes it.
+- Each screenshot read, run review and chat message is one Claude API call on your key.
+
+## Layout
 
 ```
-server/   Express API, plan generator, Claude coach, JSON storage
-public/   The app (index.html, app.js, styles.css, design/ui.js)
-public/design/   Design contract, gallery.html, review notes
+api/index.js        Vercel entry, hands every /api/* request to the Express app
+server/             Express app, plan generator, Claude coach, storage (Supabase or file)
+supabase/schema.sql The one table plus row-level security
+public/             The app (index.html, app.js, styles.css, design/ui.js, sw.js)
+vercel.json         Serves public/, rewrites /api/* to the function
 ```
-
-Change the model with `STRIDE_MODEL` (default `claude-sonnet-5-5`).

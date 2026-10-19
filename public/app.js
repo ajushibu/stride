@@ -528,6 +528,7 @@
       '<label class="toggle"><span>Rebuild the weeks ahead with these settings</span><input type="checkbox" id="s-regen"><span class="toggle__track"></span></label>' +
       '<div class="hint">AI coach: ' + (S.ai.enabled ? 'on (' + esc(S.ai.model) + ')' : 'off. Set ANTHROPIC_API_KEY on the server.') + '</div>' +
       '<button class="btn btn--ghost btn--sm" data-act="clear-chat">Clear coach chat</button>' +
+      (API.mode() === 'supabase' ? '<button class="btn btn--ghost btn--sm" data-act="sign-out">Sign out</button>' : '') +
       '</div></div><div class="sheet__foot"><button class="btn btn--primary btn--block" id="save-settings">Save</button></div>';
     open('#ov-settings');
   }
@@ -548,10 +549,30 @@
   }
 
   /* ------------------------------------------------------------------ passcode */
-  function askPasscode() {
-    $('#pass-modal').innerHTML = '<div class="modal__icon">' + I('lock', { size: 48 }) + '</div><h2 class="modal__title">Enter passcode</h2><p class="modal__text">This Stride server is protected.</p>' +
-      '<div class="field" style="width:100%"><input class="input" id="pass-in" type="password" autocomplete="current-password" aria-label="Passcode"></div><button class="btn btn--primary" id="pass-go" style="margin-top:12px">Unlock</button>';
+  function askAuth(msg) {
+    const sb = API.mode() === 'supabase';
+    $('#pass-modal').innerHTML = '<div class="modal__icon">' + I('lock', { size: 48 }) + '</div><h2 class="modal__title">' + (sb ? 'Sign in' : 'Enter passcode') + '</h2>' +
+      '<p class="modal__text">' + esc(msg || (sb ? 'Use the same account as your other apps.' : 'This Stride server is protected.')) + '</p>' +
+      '<div class="field" style="width:100%;text-align:left">' +
+      (sb ? '<label class="field__label" for="auth-email">Email</label><input class="input" id="auth-email" type="email" autocomplete="username" inputmode="email" style="margin-bottom:10px">' : '') +
+      '<label class="field__label" for="auth-pass">' + (sb ? 'Password' : 'Passcode') + '</label><input class="input" id="auth-pass" type="password" autocomplete="current-password"></div>' +
+      '<button class="btn btn--primary" id="auth-go" style="margin-top:12px">' + (sb ? 'Sign in' : 'Unlock') + '</button>';
     open('#ov-pass');
+    const f = $(sb ? '#auth-email' : '#auth-pass'); if (f) f.focus();
+  }
+
+  async function doAuth() {
+    const btn = $('#auth-go');
+    btn.disabled = true;
+    try {
+      if (API.mode() === 'supabase') await API.signIn($('#auth-email').value.trim(), $('#auth-pass').value);
+      else API.setPasscode($('#auth-pass').value);
+      close('#ov-pass');
+      init();
+    } catch (e) {
+      btn.disabled = false;
+      toast(e.message, 'error');
+    }
   }
 
   /* ------------------------------------------------------------------ render + events */
@@ -572,7 +593,7 @@
   }
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],#confirm-run,#save-settings,#chat-send,#pass-go');
+    const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],#confirm-run,#save-settings,#chat-send,#auth-go');
     if (!t) return;
     if (t.dataset.tab) return go(t.dataset.tab);
     if (t.dataset.phaseToggle) { const ph = t.dataset.phaseToggle; if (openPhases.has(ph)) openPhases.delete(ph); else openPhases.add(ph); const y = window.scrollY; renderPlan(); window.scrollTo(0, y); return; }
@@ -582,7 +603,7 @@
     if (t.id === 'chat-send') { const i = $('#chat-input'); const v = i.value; i.value = ''; return sendChat(v); }
     if (t.id === 'confirm-run') return confirmRun();
     if (t.id === 'save-settings') return saveSettings();
-    if (t.id === 'pass-go') { API.setPasscode($('#pass-in').value); close('#ov-pass'); return init(); }
+    if (t.id === 'auth-go') return doAuth();
     if (t.dataset.sessLog) { close('#ov-session'); return startLog(t.dataset.sessLog); }
     if (t.dataset.sessSkip) {
       try { const r = await API.skip(t.dataset.sessSkip, 'Skipped by you'); S.plan = r.plan; S.summary = r.summary; close('#ov-session'); render(); toast('Session skipped'); } catch (err) { toast(err.message, 'error'); }
@@ -594,6 +615,7 @@
       case 'streak': return toast(S.summary.streak.current + ' completed runs in a row. Best: ' + S.summary.streak.best);
       case 'manual': L.manual = true; L.ex = {}; L.step = 3; return renderLog();
       case 'log-back': L.step = 1; return renderLog();
+      case 'sign-out': API.signOut(); location.reload(); return;
       case 'clear-chat': try { await API.clearChat(); S.chat = []; close('#ov-settings'); render(); toast('Chat cleared'); } catch (err) { toast(err.message, 'error'); } return;
     }
   });
@@ -614,6 +636,7 @@
   });
 
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.target.id === 'auth-pass' || e.target.id === 'auth-email')) { e.preventDefault(); doAuth(); }
     if (e.key === 'Enter' && e.target.id === 'chat-input') { const v = e.target.value; e.target.value = ''; sendChat(v); }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.sid) { e.preventDefault(); openSession(e.target.dataset.sid); }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.phaseToggle) { e.preventDefault(); e.target.click(); }
@@ -627,9 +650,12 @@
 
   async function init() {
     try {
+      await API.init();
+      if (API.mode() === 'supabase' && !API.signedIn()) return askAuth();
       S = await API.state();
     } catch (e) {
-      if (e.status === 401) return askPasscode();
+      if (e.status === 401) { API.signOut(); return askAuth(API.mode() === 'supabase' ? 'Please sign in again.' : 'Wrong passcode, try again.'); }
+      if (e.status === 403) { API.signOut(); return askAuth(e.message + ' Sign in with the allowed account.'); }
       document.body.insertAdjacentHTML('afterbegin', '<div class="banner banner--error" style="margin:16px">Can’t reach the Stride server: ' + esc(e.message) + '</div>');
       return;
     }

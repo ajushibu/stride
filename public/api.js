@@ -1,14 +1,52 @@
 // Thin client for the Stride server + small formatting helpers. No framework.
 (function () {
   const PASS_KEY = 'stride.passcode';
+  const SESSION_KEY = 'stride.session';
+  let cfg = null; // { auth: 'supabase' | 'passcode' | 'none', supabase_url, supabase_key }
 
-  async function request(method, url, body, isForm) {
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
+  };
+
+  /* ---- Supabase password sign-in (plain REST, no SDK) ---- */
+  const getSession = () => { try { return JSON.parse(store.get(SESSION_KEY) || 'null'); } catch (e) { return null; } };
+  function saveSession(j) {
+    const s = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600) };
+    store.set(SESSION_KEY, JSON.stringify(s));
+    return s;
+  }
+  async function sbToken(grant, body) {
+    const r = await fetch(cfg.supabase_url + '/auth/v1/token?grant_type=' + grant, {
+      method: 'POST', headers: { apikey: cfg.supabase_key, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error_description || j.msg || j.message || 'Sign-in failed'); e.status = r.status; throw e; }
+    return saveSession(j);
+  }
+  async function freshToken(force) {
+    let s = getSession();
+    if (!s) return null;
+    if (force || s.expires_at - Math.floor(Date.now() / 1000) < 60) {
+      try { s = await sbToken('refresh_token', { refresh_token: s.refresh_token }); } catch (e) { store.del(SESSION_KEY); return null; }
+    }
+    return s.access_token;
+  }
+
+  async function request(method, url, body, isForm, retried) {
     const headers = {};
-    try { const p = localStorage.getItem(PASS_KEY); if (p) headers['x-passcode'] = p; } catch (e) { /* storage blocked */ }
+    if (cfg && cfg.auth === 'supabase') {
+      const t = await freshToken(false);
+      if (t) headers.authorization = 'Bearer ' + t;
+    } else { const p = store.get(PASS_KEY); if (p) headers['x-passcode'] = p; }
     if (body && !isForm) headers['content-type'] = 'application/json';
     const res = await fetch(url, { method, headers, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
     let data = null;
     try { data = await res.json(); } catch (e) { /* non-JSON */ }
+    if (res.status === 401 && cfg && cfg.auth === 'supabase' && !retried && getSession()) {
+      if (await freshToken(true)) return request(method, url, body, isForm, true);
+    }
     if (!res.ok) {
       const err = new Error((data && data.message) || 'Request failed (' + res.status + ')');
       err.status = res.status;
@@ -19,7 +57,12 @@
   }
 
   const API = {
-    setPasscode(p) { try { localStorage.setItem(PASS_KEY, p); } catch (e) { /* ignore */ } },
+    async init() { const r = await fetch('/api/config'); cfg = await r.json(); return cfg; },
+    mode: () => (cfg ? cfg.auth : 'none'),
+    setPasscode(p) { store.set(PASS_KEY, p); },
+    async signIn(email, password) { await sbToken('password', { email, password }); },
+    signOut() { store.del(SESSION_KEY); },
+    signedIn: () => !!getSession(),
     state: () => request('GET', '/api/state'),
     saveProfile: (b) => request('PUT', '/api/profile', b),
     extract(file) { const f = new FormData(); f.append('image', file); return request('POST', '/api/runs/extract', f, true); },
