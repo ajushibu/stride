@@ -19,6 +19,20 @@ function api() {
 }
 const hasKey = () => !!process.env.ANTHROPIC_API_KEY;
 
+
+// This model rejects forced tool_choice ("tool"/"any"), so we ask for the tool in the prompt and
+// check the reply. If the model answers in plain text instead, we retry once with a firmer nudge.
+async function callTool(params, toolName) {
+  const run = async (extra) => {
+    const messages = extra ? [...params.messages, { role: 'assistant', content: 'I will call the tool now.' }, { role: 'user', content: extra }] : params.messages;
+    const res = await api().messages.create({ ...params, messages });
+    return res.content.find((b) => b.type === 'tool_use' && b.name === toolName);
+  };
+  let tool = await run();
+  if (!tool) tool = await run('Call the ' + toolName + ' tool now. Reply with the tool call only, no other text.');
+  return tool;
+}
+
 /* ---------- 1. Screenshot -> structured run ---------- */
 
 const RECORD_RUN = {
@@ -46,11 +60,10 @@ const RECORD_RUN = {
 };
 
 async function extractRun(buffer, mediaType) {
-  const res = await api().messages.create({
+  const tool = await callTool({
     model: MODEL,
     max_tokens: 1024,
     tools: [RECORD_RUN],
-    tool_choice: { type: 'tool', name: 'record_run' },
     messages: [
       {
         role: 'user',
@@ -59,15 +72,14 @@ async function extractRun(buffer, mediaType) {
           {
             type: 'text',
             text:
-              'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. Extract the run into record_run. ' +
+              'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
               'Convert miles to km if needed and say so in notes. Pace must be seconds per km. If the screenshot shows several screens, combine them. ' +
               'If a value is not visible, use null. Do not invent numbers.',
           },
         ],
       },
     ],
-  });
-  const tool = res.content.find((b) => b.type === 'tool_use');
+  }, 'record_run');
   if (!tool) throw new Error('The model did not return a run record.');
   const r = tool.input;
   // derive missing pieces from the ones we have
@@ -238,23 +250,21 @@ function applyChanges(store, today, proposal) {
 
 async function reviewRun(store, today, run) {
   const ctx = planContext(store, today);
-  const res = await api().messages.create({
+  const tool = await callTool({
     model: MODEL,
     max_tokens: 2048,
     system: SYSTEM,
     tools: [UPDATE_PLAN],
-    tool_choice: { type: 'tool', name: 'update_plan' },
     messages: [
       {
         role: 'user',
         content:
-          `The runner just logged a run. Review it against the plan and decide whether any upcoming session needs changing.\n\n` +
+          `The runner just logged a run. Review it against the plan and decide whether any upcoming session needs changing. You must answer by calling the update_plan tool.\n\n` +
           `NEW RUN:\n${JSON.stringify({ ...run, pace: secToPace(run.avg_pace_sec), time: secToHMS(run.duration_sec || 0) })}\n\n` +
           `CONTEXT:\n${JSON.stringify(ctx)}`,
       },
     ],
-  });
-  const tool = res.content.find((b) => b.type === 'tool_use');
+  }, 'update_plan');
   if (!tool) throw new Error('No plan proposal returned.');
   return tool.input;
 }

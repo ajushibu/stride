@@ -48,6 +48,15 @@ const todayOf = (store) => todayIn(store.profile.timezone);
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
   console.error(e);
   if (e.code === 'no_api_key') return res.status(503).json({ error: 'no_api_key', message: e.message });
+  if (e.status && e.error && e.error.type) { // error from the Anthropic API
+    const t = e.error.error && e.error.error.type, m = (e.error.error && e.error.error.message) || '';
+    const msg = e.status === 401 ? 'The Claude API key on the server is invalid. Check ANTHROPIC_API_KEY in Vercel and redeploy.'
+      : /credit balance/i.test(m) ? 'Your Anthropic account is out of credit. Add credit under Billing in the Anthropic console.'
+      : e.status === 429 ? 'Claude is rate limited right now. Try again in a minute.'
+      : e.status === 529 || e.status >= 500 ? 'Claude is busy right now. Try again in a minute.'
+      : 'Claude could not process that (' + (t || e.status) + '). ' + m.slice(0, 160);
+    return res.status(502).json({ error: 'ai_error', message: msg });
+  }
   res.status(500).json({ error: 'server_error', message: e.message || 'Something went wrong' });
 });
 
