@@ -114,19 +114,21 @@
     const days = letters.map((d, i) => {
       const date = F.addDays(w.start, i);
       const s = w.sessions.find((x) => x.date === date);
-      let state = 'rest', km = null;
+      let state = 'rest', km = null, extraLabel = '';
       const extra = !s ? S.runs.filter((r) => r.date === date && !r.session_id) : [];
       if (extra.length) { state = 'done'; km = F.km(extra.reduce((a, r) => a + r.distance_km, 0)); }
       if (s) {
         km = F.km(s.km);
         if (s.status === 'done') {
           const r = runFor(s.id);
-          state = r && (r.distance_km < s.km * 0.85 || r.distance_km > s.km * 1.15) ? 'half' : 'done';
+          const late = r && r.date !== s.date;
+          state = r && (late || r.distance_km < s.km * 0.85 || r.distance_km > s.km * 1.15) ? 'half' : 'done';
           if (r) km = F.km(r.distance_km);
+          if (late) extraLabel = ', ran on ' + F.dayShort(r.date);
         } else if (s.status === 'skipped' || date < t) state = 'missed';
         else state = 'planned';
       }
-      return { d, state, km, today: date === t, label: F.dayLong(date) + (s ? ', ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km, ' + s.status : ', rest') };
+      return { d, state, km, today: date === t, label: F.dayLong(date) + (s ? ', ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km, ' + s.status + extraLabel : ', rest') };
     });
     return '<div class="card card--pad-sm">' + UI.weekStrip(days) + '</div>';
   }
@@ -156,12 +158,20 @@
         '<p>' + esc(lr.review.coach_note) + '</p></div></div>'
       : '';
 
+    const missed = allSessions().filter((s) => s.status === 'planned' && s.date < todayStr() && s.date >= F.addDays(todayStr(), -7) && s.type !== 'race')
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 2);
+    const missedCard = missed.length
+      ? '<div class="card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('alert') + '</span><span class="card__title">Missed a run?</span></div><div class="stack stack--sm">' +
+        missed.map((s) => '<div class="missed-row"><div><b>' + esc(F.dayShort(s.date) + ' · ' + F.typeLabel(s.type).toLowerCase() + ' ' + F.km(s.km) + ' km') + '</b><div class="hint">Ran it on another day? Log it with the real date.</div></div>' +
+          '<div class="missed-actions"><button class="btn btn--soft btn--sm" data-sess-log="' + s.id + '">Log it</button><button class="btn btn--ghost btn--sm" data-sess-skip="' + s.id + '">Missed</button></div></div>').join('') + '</div></div>'
+      : '';
+
     $('#screen-today').innerHTML =
       hdr(F.dayShort(todayStr()) + ' ' + F.dateShort(todayStr()), greeting()) +
       '<div class="stack">' +
       UI.arcGauge({ pct: wp.pct, value: wp.pct, unit: 'PERCENT', label: 'WEEK COMPLETE', caption: '<span class="delta"><b>' + F.km(wp.done_km) + '</b> of ' + F.km(wp.planned_km) + ' km</span>' }) +
       '<div class="section-title">' + (sm.today_session ? 'Today’s run' : 'Next run') + ' <small>' + (cw ? 'Week ' + cw.n + ' · ' + esc(cw.phase) : '') + '</small></div>' +
-      hero + feedback + weekStripHtml() +
+      hero + missedCard + feedback + weekStripHtml() +
       '<div class="grid-2">' +
       '<div class="card stat-card"><div class="card__head"><span class="card__icon" style="--c:var(--mint)">' + I('run') + '</span><span class="card__title">Weekly km</span></div><div class="stat-card__body stat-card__body--center">' +
       UI.ring({ pct: wp.pct, size: 118, stroke: 14, color: 'var(--mint)', center: '<b class="num">' + F.km(wp.done_km) + '</b><small>of ' + F.km(wp.planned_km) + ' km</small>', ariaLabel: wp.pct + ' percent of weekly distance' }) + '</div></div>' +
@@ -345,7 +355,8 @@
     if (!s) return;
     const run = runFor(s.id);
     const hr = hrText(s);
-    const canAct = s.status === 'planned' && s.date >= todayStr();
+    const past = s.date < todayStr();
+    const canAct = s.status === 'planned';
     const canLog = s.status === 'planned' && s.date <= F.addDays(todayStr(), 2);
     const rows = [
       ['Date', F.dateLong(s.date)],
@@ -353,7 +364,7 @@
       ['Distance', F.km(s.km) + ' km'],
       s.pace_lo ? ['Target pace', F.paceRange(s.pace_lo, s.pace_hi) + ' /km'] : null,
       hr ? ['Heart rate', hr.r + ' bpm'] : null,
-      ['Status', s.status === 'done' ? 'Done' : s.status === 'skipped' ? 'Skipped' : 'Planned'],
+      ['Status', s.status === 'done' ? (run && run.date !== s.date ? 'Done on ' + F.dateShort(run.date) : 'Done') : s.status === 'skipped' ? (past ? 'Missed' : 'Skipped') : past ? 'Missed' : 'Planned'],
     ].filter(Boolean);
     $('#session-sheet').innerHTML =
       '<div class="sheet__grab"></div><div class="sheet__head"><div><h2 class="sheet__title">' + esc(s.title || F.typeLabel(s.type)) + '</h2><p class="sheet__sub">Week ' + s.week + ' · ' + esc(s.phase) + (s.coach_edited ? ' · adjusted by coach' : '') + '</p></div><button class="icon-btn" data-close aria-label="Close">' + I('close') + '</button></div>' +
@@ -361,14 +372,14 @@
       '<p class="hint" style="margin-top:12px">' + esc(s.note || '') + '</p>' +
       (run ? '<div class="card card--flat" style="margin-top:12px"><span class="label">Your run</span><div class="num num--sm" style="margin-top:6px">' + F.km(run.distance_km) + ' km · ' + F.pace(run.avg_pace_sec) + '/km' + (run.avg_hr ? ' · ' + run.avg_hr + ' bpm' : '') + '</div></div>' : '') +
       '</div><div class="sheet__foot">' +
-      (canLog ? '<button class="btn btn--primary btn--block" data-sess-log="' + s.id + '">' + I('run', { size: 22 }) + 'Log this run</button>' : '') +
-      (canAct ? '<button class="btn btn--soft btn--block" data-sess-skip="' + s.id + '">Skip this session</button>' : '') + '</div>';
+      (canLog ? '<button class="btn btn--primary btn--block" data-sess-log="' + s.id + '">' + I('run', { size: 22 }) + (past ? 'I ran this on another day' : 'Log this run') + '</button>' : '') +
+      (canAct ? '<button class="btn btn--soft btn--block" data-sess-skip="' + s.id + '">' + (past ? 'Mark as missed' : 'Skip this session') + '</button>' : '') + '</div>';
     open('#ov-session');
   }
 
   /* ------------------------------------------------------------------ LOG FLOW */
-  function startLog(preSessionId) {
-    L = { step: 1, preSession: preSessionId || null, file: null, previewUrl: null, ex: null, edited: {}, paceTouched: false };
+  function startLog(preSessionId, explicit) {
+    L = { step: 1, preSession: preSessionId || null, explicit: !!explicit, file: null, previewUrl: null, ex: null, edited: {}, paceTouched: false };
     renderLog();
     open('#ov-log');
   }
@@ -410,20 +421,38 @@
         field('f-cad', 'Cadence', ex.cadence_spm, 'spm', '', 'numeric') +
         field('f-cal', 'Calories', ex.calories, 'kcal', '', 'numeric') +
         '</div>' +
-        '<div class="field" style="margin-top:14px"><label class="field__label" for="f-session">Which planned session was this?</label><select class="select" id="f-session"></select></div></div>' +
+        '<div class="field" style="margin-top:14px"><label class="field__label" for="f-session">Count this run as</label><select class="select" id="f-session"></select><span class="field__hint" id="f-sess-hint"></span></div></div>' +
         '<div class="sheet__foot"><button class="btn btn--primary btn--block" id="confirm-run">Confirm &amp; update plan</button><button class="btn btn--text" data-act="log-back">Back</button></div>';
-      fillSessionSelect(L.suggested || L.preSession);
+      fillSessionSelect(L.explicit ? L.preSession : (L.suggested || L.preSession));
     }
   }
 
+  const dayDiff = (a, b) => Math.round((Date.parse(a) - Date.parse(b)) / 86400000);
+
+  // Offers every open session from the last 14 days (missed ones are labelled) plus the next 3 days,
+  // nearest to the run date first, and always an "extra run" choice.
   function fillSessionSelect(selectId) {
     const sel = $('#f-session');
     if (!sel) return;
     const date = ($('#f-date') || {}).value || todayStr();
-    const diff = (a, b) => Math.round((Date.parse(a) - Date.parse(b)) / 86400000);
-    const opts = allSessions().filter((s) => s.status === 'planned' && Math.abs(diff(s.date, date)) <= 3 && s.date <= F.addDays(todayStr(), 3));
-    sel.innerHTML = '<option value="">Not in the plan (extra run)</option>' + opts.map((s) => '<option value="' + s.id + '">' + esc(F.dayShort(s.date) + ' ' + F.dateShort(s.date) + ' · ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km') + '</option>').join('');
+    const t = todayStr();
+    const opts = allSessions()
+      .filter((s) => s.status === 'planned' && s.date >= F.addDays(t, -14) && s.date <= F.addDays(t, 3))
+      .sort((a, b) => Math.abs(dayDiff(a.date, date)) - Math.abs(dayDiff(b.date, date)) || a.date.localeCompare(b.date));
+    sel.innerHTML = '<option value="">Extra run (not in the plan)</option>' + opts.map((s) => '<option value="' + s.id + '">' + esc(F.dayShort(s.date) + ' ' + F.dateShort(s.date) + ' · ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km' + (s.date < t ? ' · missed' : '')) + '</option>').join('');
     if (selectId && opts.some((s) => s.id === selectId)) sel.value = selectId;
+    updateSessionHint();
+  }
+
+  function updateSessionHint() {
+    const el = $('#f-sess-hint');
+    if (!el) return;
+    const id = ($('#f-session') || {}).value, date = ($('#f-date') || {}).value;
+    const s = id && findSession(id);
+    if (!s) { el.textContent = 'Not tied to a planned session. It still counts toward this week’s distance and the coach sees it.'; return; }
+    const d = dayDiff(date, s.date);
+    el.textContent = d === 0 ? 'Right on schedule.'
+      : 'Planned for ' + F.dateLong(s.date) + ', and you ran it ' + Math.abs(d) + (Math.abs(d) === 1 ? ' day ' : ' days ') + (d > 0 ? 'later' : 'earlier') + '. It counts as done, and the coach will check the days around it.';
   }
 
   function compressImage(file) {
@@ -604,9 +633,10 @@
     if (t.id === 'confirm-run') return confirmRun();
     if (t.id === 'save-settings') return saveSettings();
     if (t.id === 'auth-go') return doAuth();
-    if (t.dataset.sessLog) { close('#ov-session'); return startLog(t.dataset.sessLog); }
+    if (t.dataset.sessLog) { close('#ov-session'); return startLog(t.dataset.sessLog, true); }
     if (t.dataset.sessSkip) {
-      try { const r = await API.skip(t.dataset.sessSkip, 'Skipped by you'); S.plan = r.plan; S.summary = r.summary; close('#ov-session'); render(); toast('Session skipped'); } catch (err) { toast(err.message, 'error'); }
+      const sk = findSession(t.dataset.sessSkip), wasPast = sk && sk.date < todayStr();
+      try { const r = await API.skip(t.dataset.sessSkip, wasPast ? 'Missed' : 'Skipped by you'); S.plan = r.plan; S.summary = r.summary; close('#ov-session'); render(); toast(wasPast ? 'Marked as missed' : 'Session skipped'); } catch (err) { toast(err.message, 'error'); }
       return;
     }
     switch (t.dataset.act) {
@@ -622,7 +652,8 @@
 
   document.addEventListener('change', (e) => {
     if (e.target.id === 'shot') onShot(e.target.files[0]);
-    if (e.target.id === 'f-date') fillSessionSelect(null);
+    if (e.target.id === 'f-date') fillSessionSelect(($('#f-session') || {}).value || null);
+    if (e.target.id === 'f-session') updateSessionHint();
   });
 
   document.addEventListener('input', (e) => {

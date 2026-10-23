@@ -115,9 +115,11 @@ app.post('/api/runs/extract', upload.single('image'), wrap(async (req, res) => {
   const date = extracted.date || t;
   // suggest which planned session this run belongs to
   const candidates = allSessions(store.plan)
-    .filter((s) => s.status === 'planned' && Math.abs(diffDays(date, s.date)) <= 2)
+    .filter((s) => s.status === 'planned' && diffDays(date, s.date) >= -14 && diffDays(date, s.date) <= 3) // up to 14 days late, 3 days early
     .sort((a, b) => Math.abs(diffDays(date, a.date)) - Math.abs(diffDays(date, b.date)) || Math.abs(a.km - (extracted.distance_km || 0)) - Math.abs(b.km - (extracted.distance_km || 0)));
-  res.json({ extracted, suggested_session_id: candidates[0]?.id || null, date });
+  const best = candidates[0];
+  const suggested = best && Math.abs(diffDays(date, best.date)) <= 3 ? best.id : null; // older missed sessions are offered, not assumed
+  res.json({ extracted, suggested_session_id: suggested, date });
 }));
 
 app.post('/api/runs', wrap(async (req, res) => {
@@ -157,7 +159,8 @@ app.post('/api/runs', wrap(async (req, res) => {
     }
     if (!session) run.session_id = null;
   }
-  if (session) { session.status = 'done'; session.run_id = run.id; }
+  if (session && Math.abs(diffDays(session.date, run.date)) > 14) return res.status(400).json({ error: 'bad_session', message: 'That session is more than two weeks from the run date.' });
+  if (session) { run.planned_date = session.date; session.status = 'done'; session.run_id = run.id; session.done_on = run.date; }
   store.runs.push(run);
   store.runs.sort((a, b) => a.date.localeCompare(b.date));
 

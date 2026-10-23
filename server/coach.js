@@ -140,6 +140,7 @@ Rules:
 - Be honest and specific. Do not flatter. If a run was too fast, too hard, or too short, say so plainly.
 - Easy runs are controlled by heart rate: if average HR on an easy run was above the cap, the next easy runs should be slower, not shorter by default.
 - Never raise weekly volume more than ~10% over the previous non-cutback week and never add intensity after a missed or poor-recovery week.
+- Missed sessions are never made up by adding distance later. If a run was done on a different day than planned (see planned_date), it still counts as that session. Check the days around it: keep at least 48 hours between hard sessions (tempo, long run), never put a hard session the day after a long run, and if the shifted run collides with the next session, make that next session easier or shorter rather than stacking volume.
 - Prefer small adjustments. Do not rewrite the plan after one run. Changes should only touch sessions in the next 21 days.
 - Pain, dizziness, chest symptoms or a sharp pain that changes gait: tell the runner to stop running and see a doctor/physio, and put it in flags.
 - You are not a doctor. Keep notes short. Pace is in min:sec per km.`;
@@ -166,7 +167,11 @@ function planContext(store, today) {
     avg_hr: r.avg_hr,
     max_hr: r.max_hr,
     session_id: r.session_id,
+    planned_date: r.planned_date || null,
   }));
+  const missed = allSessions(store.plan)
+    .filter((s) => s.status === 'planned' && s.date < today && s.date >= addDays(today, -10))
+    .map((s) => ({ id: s.id, date: s.date, type: s.type, km: s.km }));
   const p = store.profile;
   return {
     today,
@@ -177,6 +182,7 @@ function planContext(store, today) {
     stats: summary(store, today),
     upcoming_sessions: upcoming,
     recent_runs: runs,
+    missed_recent: missed,
   };
 }
 
@@ -261,6 +267,8 @@ async function reviewRun(store, today, run) {
         content:
           `The runner just logged a run. Review it against the plan and decide whether any upcoming session needs changing. You must answer by calling the update_plan tool.\n\n` +
           `NEW RUN:\n${JSON.stringify({ ...run, pace: secToPace(run.avg_pace_sec), time: secToHMS(run.duration_sec || 0) })}\n\n` +
+          (run.planned_date && run.planned_date !== run.date ? `NOTE: this run was planned for ${run.planned_date} but done on ${run.date} (${Math.abs(diffDays(run.planned_date, run.date))} day(s) ${run.date > run.planned_date ? 'late' : 'early'}). Check the sessions around it for collisions.\n\n` : '') +
+          (!run.session_id ? 'NOTE: this was an extra run, not linked to a planned session.\n\n' : '') +
           `CONTEXT:\n${JSON.stringify(ctx)}`,
       },
     ],
@@ -283,6 +291,7 @@ function fallbackReview(store, today, run) {
     verdict = 'behind';
     note += ` That was short of the planned ${planned.km} km. No plan changes made.`;
   } else note += ' Looks in line with the plan.';
+  if (planned && planned.date !== run.date) note += ` It counts as your ${planned.date} session, done on ${run.date}. Keep a rest day before the next hard run.`;
   return { verdict, coach_note: note + ' (Offline coach: AI review unavailable.)', what_changed: 'No changes to the plan.', session_changes: [], flags };
 }
 

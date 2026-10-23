@@ -38,3 +38,12 @@
 .phase__chev { display: inline-flex; margin-left: 4px; color: var(--ink-3, #64727f); transition: transform .2s; }
 .phase.is-collapsed .phase__chev { transform: rotate(-90deg); }
 .phase.is-collapsed > .week-row { display: none; }
+
+.missed-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.missed-row .hint { margin-top: 2px; font-size: 13px; }
+.missed-actions { display: flex; gap: 6px; flex: none; }
+#f-sess-hint { display: block; margin-top: 8px; }
+.missed-row { flex-wrap: wrap; }
+.missed-row > div:first-child { flex: 1 1 200px; min-width: 0; }
+.missed-actions { flex: 1 1 100%; }
+.missed-actions .btn { flex: 1; }

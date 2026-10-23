@@ -6,7 +6,7 @@ A marathon training app for your phone with a Claude-powered coach.
 - **Plan**: a 51-week plan to race day (Base, Build, Peak, Taper) with a 10K test and a half-marathon test.
 - **Insights**: race readiness, streaks, weekly distance, pace and heart-rate trends.
 - **Coach**: chat. Say "my calf is sore" or "I'm travelling Thursday" and the plan adjusts.
-- **Log run**: upload a Galaxy Watch run screenshot. Claude reads the numbers, you confirm, the coach reviews the run and adjusts the next few weeks.
+- **Log run**: upload a Galaxy Watch run screenshot. Claude reads the numbers, you confirm, the coach reviews the run and adjusts the next few weeks. Ran it on a different day than planned? Pick the date and the session it counts as. Missed runs show up on Today so you can log them late or mark them missed.
 
 ## Deploy (Vercel + Supabase, both free tiers)
 
