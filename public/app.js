@@ -289,7 +289,7 @@
 
     const hist = S.runs.length
       ? '<div class="section-title">Run history <small>' + S.runs.length + (S.runs.length === 1 ? ' run' : ' runs') + '</small></div><div class="card"><div class="stack stack--sm">' +
-        S.runs.slice().reverse().slice(0, 12).map((r) => '<div class="row row--between"><div><b>' + F.km(r.distance_km) + ' km</b> <span class="muted">· ' + F.pace(r.avg_pace_sec) + '/km' + (r.avg_hr ? ' · ' + r.avg_hr + ' bpm' : '') + '</span></div><span class="muted">' + esc(F.dateShort(r.date)) + '</span></div>').join('') + '</div></div>'
+        S.runs.slice().reverse().slice(0, 12).map((r) => '<div class="row row--between"><div><b>' + F.km(r.distance_km) + ' km</b> <span class="muted">· ' + F.pace(r.avg_pace_sec) + '/km' + (r.avg_hr ? ' · ' + r.avg_hr + ' bpm' : '') + '</span>' + (r.notes ? '<div class="hint run-note">' + esc(r.notes) + '</div>' : '') + '</div><span class="muted">' + esc(F.dateShort(r.date)) + '</span></div>').join('') + '</div></div>'
       : '';
 
     $('#screen-insights').innerHTML = hdr(Math.max(0, sm.days_to_race) + ' days to race', 'Insights', 'nostreak') + '<div class="stack">' + readiness +
@@ -409,18 +409,19 @@
       const field = (id, label, val, unit, extra, mode) => '<label class="field-card' + (extra || '') + '"><span class="label">' + label + '</span><span class="field-card__row"><input class="field-card__input" id="' + id + '" value="' + esc(val == null ? '' : val) + '" inputmode="' + (mode || 'decimal') + '" autocomplete="off"><span class="field-card__unit">' + unit + '</span></span></label>';
       el.innerHTML = sheetHead('Confirm your run', L.manual ? 'Enter the numbers from your watch' : 'Check what I read. Tap any value to fix it.') + stepper(3) +
         '<div class="sheet__body">' +
-        (ex.notes && !L.manual ? '<div class="banner" style="margin-bottom:12px">' + esc(ex.notes) + '</div>' : '') +
+        (ex.notes && !L.manual && ex.notes.length <= 140 ? '<div class="banner" style="margin-bottom:12px">' + esc(ex.notes) + '</div>' : '') +
         (ex.is_run === false ? '<div class="banner banner--error" style="margin-bottom:12px">This doesn’t look like a running workout. Check the screenshot.</div>' : '') +
         '<div class="field-grid">' +
         '<label class="field-card field-card--wide"><span class="label">Date</span><span class="field-card__row"><input class="field-card__input" id="f-date" type="date" value="' + date + '" max="' + todayStr() + '"></span></label>' +
         field('f-dist', 'Distance', ex.distance_km, 'km', warn(ex.distance_km)) +
-        field('f-time', 'Time', t, 'h:mm:ss', warn(ex.duration_sec), 'text') +
+        field('f-time', 'Time', t, '', warn(ex.duration_sec), 'text') +
         field('f-pace', 'Avg pace', ex.avg_pace_sec_per_km ? F.pace(ex.avg_pace_sec_per_km) : '', '/km', warn(ex.avg_pace_sec_per_km), 'text') +
         field('f-hr', 'Avg HR', ex.avg_hr, 'bpm', warn(ex.avg_hr), 'numeric') +
         field('f-maxhr', 'Max HR', ex.max_hr, 'bpm', '', 'numeric') +
         field('f-cad', 'Cadence', ex.cadence_spm, 'spm', '', 'numeric') +
         field('f-cal', 'Calories', ex.calories, 'kcal', '', 'numeric') +
         '</div>' +
+        '<div class="field" style="margin-top:14px"><span class="field__label">How did it feel? <small class="muted">optional</small></span><div class="tagrow">' + ['Dehydrated','Felt unwell','Poor sleep','Hot / humid','Sore / niggle','Hilly route','Felt great'].map((x) => '<button type="button" class="chip" data-tag="' + x + '">' + x + '</button>').join('') + '</div><textarea class="textarea" id="f-notes" maxlength="250" rows="2" placeholder="Anything the coach should know about this run"></textarea></div>' +
         '<div class="field" style="margin-top:14px"><label class="field__label" for="f-session">Count this run as</label><select class="select" id="f-session"></select><span class="field__hint" id="f-sess-hint"></span></div></div>' +
         '<div class="sheet__foot"><button class="btn btn--primary btn--block" id="confirm-run">Confirm &amp; update plan</button><button class="btn btn--text" data-act="log-back">Back</button></div>';
       fillSessionSelect(L.explicit ? L.preSession : (L.suggested || L.preSession));
@@ -492,7 +493,7 @@
     const num = (id) => { const x = parseFloat(String(v(id) || '').replace(',', '.')); return Number.isFinite(x) ? x : null; };
     const dur = F.parseTime(v('#f-time') || '', false);
     const pace = F.parseTime(v('#f-pace') || '', false);
-    return { date: v('#f-date'), distance_km: num('#f-dist'), duration_sec: dur, avg_pace_sec: pace, avg_hr: num('#f-hr'), max_hr: num('#f-maxhr'), cadence: num('#f-cad'), calories: num('#f-cal'), session_id: v('#f-session') || null, source: L.manual ? 'manual' : 'screenshot' };
+    return { date: v('#f-date'), distance_km: num('#f-dist'), duration_sec: dur, avg_pace_sec: pace, avg_hr: num('#f-hr'), max_hr: num('#f-maxhr'), cadence: num('#f-cad'), calories: num('#f-cal'), notes: ((Array.from(document.querySelectorAll('.tagrow .chip.is-selected')).map((b) => b.dataset.tag).join(', ')) + ((v('#f-notes') || '').trim() ? (document.querySelector('.tagrow .chip.is-selected') ? '. ' : '') + v('#f-notes').trim() : '')).slice(0, 300), session_id: v('#f-session') || null, source: L.manual ? 'manual' : 'screenshot' };
   }
 
   async function confirmRun() {
@@ -622,6 +623,8 @@
   }
 
   document.addEventListener('click', async (e) => {
+    const tg = e.target.closest && e.target.closest('.tagrow .chip');
+    if (tg) { tg.classList.toggle('is-selected'); return; }
     const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],#confirm-run,#save-settings,#chat-send,#auth-go');
     if (!t) return;
     if (t.dataset.tab) return go(t.dataset.tab);

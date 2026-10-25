@@ -47,3 +47,8 @@
 .missed-row > div:first-child { flex: 1 1 200px; min-width: 0; }
 .missed-actions { flex: 1 1 100%; }
 .missed-actions .btn { flex: 1; }
+
+.tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
+.tagrow .chip { min-height: 38px; padding: 0 14px; font-size: 14px; }
+.run-note { margin-top: 2px; font-size: 13px; }
+#f-time { font-size: 28px; }

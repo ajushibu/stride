@@ -53,7 +53,7 @@ const RECORD_RUN = {
       elevation_gain_m: { type: ['integer', 'null'] },
       hr_zone_minutes: { type: ['object', 'null'], description: 'Minutes per heart-rate zone if shown, keys zone1..zone5.' },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-      notes: { type: 'string', description: 'Anything ambiguous, e.g. miles vs km, partial screenshot, units guessed.' },
+      notes: { type: 'string', description: 'Usually an empty string. Only if something may make a recorded number wrong (miles converted to km, partial screenshot, unreadable digit), ONE short sentence under 100 characters. Never describe other data on the screen (VO2 max, laps, sweat loss, device) and never restate the numbers.' },
     },
     required: ['is_run', 'confidence', 'notes'],
   },
@@ -73,7 +73,7 @@ async function extractRun(buffer, mediaType) {
             type: 'text',
             text:
               'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
-              'Convert miles to km if needed and say so in notes. Pace must be seconds per km. If the screenshot shows several screens, combine them. ' +
+              'Convert miles to km if needed. Keep notes empty unless a recorded number might be wrong; extra data on the screen that has no field is simply ignored. Pace must be seconds per km. If the screenshot shows several screens, combine them. ' +
               'If a value is not visible, use null. Do not invent numbers.',
           },
         ],
@@ -82,6 +82,7 @@ async function extractRun(buffer, mediaType) {
   }, 'record_run');
   if (!tool) throw new Error('The model did not return a run record.');
   const r = tool.input;
+  r.notes = typeof r.notes === 'string' && r.notes.length <= 140 ? r.notes.trim() : '';
   // derive missing pieces from the ones we have
   if (!r.avg_pace_sec_per_km && r.distance_km && r.duration_sec) r.avg_pace_sec_per_km = Math.round(r.duration_sec / r.distance_km);
   if (!r.duration_sec && r.distance_km && r.avg_pace_sec_per_km) r.duration_sec = Math.round(r.distance_km * r.avg_pace_sec_per_km);
@@ -143,6 +144,7 @@ Rules:
 - Missed sessions are never made up by adding distance later. If a run was done on a different day than planned (see planned_date), it still counts as that session. Check the days around it: keep at least 48 hours between hard sessions (tempo, long run), never put a hard session the day after a long run, and if the shifted run collides with the next session, make that next session easier or shorter rather than stacking volume.
 - Prefer small adjustments. Do not rewrite the plan after one run. Changes should only touch sessions in the next 21 days.
 - Pain, dizziness, chest symptoms or a sharp pain that changes gait: tell the runner to stop running and see a doctor/physio, and put it in flags.
+- Runner comments (runner_comment / notes on a run, e.g. dehydrated, ill, poor sleep, heat, sore) are context from the runner. Weigh them honestly: a run affected by dehydration, illness, heat or poor sleep is weaker evidence about fitness, so do not cut the plan or slow paces on that run alone, but do mention it, and if the same excuse keeps recurring say so plainly. Illness or pain still follows the safety rule below. Never let a comment excuse a pacing mistake that is not explained by it.
 - You are not a doctor. Keep notes short. Pace is in min:sec per km.`;
 
 function planContext(store, today) {
@@ -168,6 +170,7 @@ function planContext(store, today) {
     max_hr: r.max_hr,
     session_id: r.session_id,
     planned_date: r.planned_date || null,
+    runner_comment: r.notes || undefined,
   }));
   const missed = allSessions(store.plan)
     .filter((s) => s.status === 'planned' && s.date < today && s.date >= addDays(today, -10))
@@ -268,6 +271,7 @@ async function reviewRun(store, today, run) {
           `The runner just logged a run. Review it against the plan and decide whether any upcoming session needs changing. You must answer by calling the update_plan tool.\n\n` +
           `NEW RUN:\n${JSON.stringify({ ...run, pace: secToPace(run.avg_pace_sec), time: secToHMS(run.duration_sec || 0) })}\n\n` +
           (run.planned_date && run.planned_date !== run.date ? `NOTE: this run was planned for ${run.planned_date} but done on ${run.date} (${Math.abs(diffDays(run.planned_date, run.date))} day(s) ${run.date > run.planned_date ? 'late' : 'early'}). Check the sessions around it for collisions.\n\n` : '') +
+          (run.notes ? `RUNNER COMMENT on this run: "${run.notes}"\n\n` : '') +
           (!run.session_id ? 'NOTE: this was an extra run, not linked to a planned session.\n\n' : '') +
           `CONTEXT:\n${JSON.stringify(ctx)}`,
       },
