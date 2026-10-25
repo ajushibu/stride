@@ -52,3 +52,6 @@
 .tagrow .chip { min-height: 38px; padding: 0 14px; font-size: 14px; }
 .run-note { margin-top: 2px; font-size: 13px; }
 #f-time { font-size: 28px; }
+
+#result-modal { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.modal__x { position: sticky; top: 0; float: right; margin: -22px -12px 0 0; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(26,35,44,.08); color: var(--ink); font-size: 26px; line-height: 1; display: grid; place-items: center; }

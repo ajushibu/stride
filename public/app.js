@@ -531,7 +531,7 @@
     const flags = (rv.flags || []).map((f) => '<div class="banner" style="margin-top:8px;text-align:left">' + esc(f) + '</div>').join('');
     $('#result-modal').innerHTML =
       (good ? '<div class="confetti"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' : '') +
-      '<div class="modal__icon">' + (streak > 1 ? UI.flame(64) : I('sparkle', { size: 56 })) + '</div>' +
+      '<button class="modal__x" data-close aria-label="Close">×</button><div class="modal__icon">' + (streak > 1 ? UI.flame(64) : I('sparkle', { size: 56 })) + '</div>' +
       '<h2 class="modal__title">' + (streak > 1 ? '<span class="num">' + streak + '</span> Run Streak' : esc(titles[rv.verdict] || 'Run logged')) + '</h2>' +
       (streak > 1 ? '<p class="modal__text"><b>' + esc(titles[rv.verdict] || '') + '.</b></p>' : '') +
       '<p class="modal__text">' + esc(rv.coach_note) + '</p>' +

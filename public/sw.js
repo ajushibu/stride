@@ -1,6 +1,6 @@
 // Offline shell. Static files are network-first (so a new deploy shows up on the next open) with the
 // cache as a fallback when offline. API calls always go to the network and are never cached.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'stride-shell-' + VERSION;
 const SHELL = ['/', '/index.html', '/styles.css', '/app.css', '/app.js', '/api.js', '/design/ui.js', '/manifest.webmanifest'];
 
