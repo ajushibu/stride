@@ -52,12 +52,32 @@ const RECORD_RUN = {
       calories: { type: ['integer', 'null'] },
       elevation_gain_m: { type: ['integer', 'null'] },
       hr_zone_minutes: { type: ['object', 'null'], description: 'Minutes per heart-rate zone if shown, keys zone1..zone5.' },
+      segments: {
+        type: ['array', 'null'],
+        description: 'Only when the screenshots are SEPARATE workouts (different distance and duration) that together make one run, e.g. the watch recorded two parts. One entry per workout; then leave the top-level distance, duration, pace and HR fields null.',
+        items: { type: 'object', properties: { distance_km: { type: 'number' }, duration_sec: { type: 'integer' }, avg_hr: { type: ['integer', 'null'] }, max_hr: { type: ['integer', 'null'] }, cadence_spm: { type: ['integer', 'null'] }, calories: { type: ['integer', 'null'] }, elevation_gain_m: { type: ['integer', 'null'] } }, required: ['distance_km', 'duration_sec'] },
+      },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
       notes: { type: 'string', description: 'Usually an empty string. Only if something may make a recorded number wrong (miles converted to km, partial screenshot, unreadable digit), ONE short sentence under 100 characters. Never describe other data on the screen (VO2 max, laps, sweat loss, device) and never restate the numbers.' },
     },
     required: ['is_run', 'confidence', 'notes'],
   },
 };
+
+// Several separate workouts that make up one run: sum distance/time, weight HR and cadence by time.
+function mergeSegments(r) {
+  const seg = Array.isArray(r.segments) ? r.segments.filter((x) => x && x.distance_km > 0 && x.duration_sec > 0) : [];
+  if (seg.length < 2) return r;
+  const sum = (k) => seg.reduce((a, x) => a + (x[k] || 0), 0);
+  const wavg = (k) => { const xs = seg.filter((x) => x[k]); const t = xs.reduce((a, x) => a + x.duration_sec, 0); return t ? Math.round(xs.reduce((a, x) => a + x[k] * x.duration_sec, 0) / t) : null; };
+  const dist = Math.round(sum('distance_km') * 100) / 100, dur = sum('duration_sec');
+  return {
+    ...r, is_run: r.is_run !== false, distance_km: dist, duration_sec: dur, avg_pace_sec_per_km: Math.round(dur / dist),
+    avg_hr: wavg('avg_hr'), max_hr: Math.max(0, ...seg.map((x) => x.max_hr || 0)) || null, cadence_spm: wavg('cadence_spm'),
+    calories: sum('calories') || null, elevation_gain_m: sum('elevation_gain_m') || null,
+    notes: 'Combined ' + seg.length + ' workouts: ' + seg.map((x) => x.distance_km + ' km').join(' + ') + '.',
+  };
+}
 
 async function extractRun(images) {
   const tool = await callTool({
@@ -72,7 +92,7 @@ async function extractRun(images) {
           {
             type: 'text',
             text:
-              (images.length > 1 ? `These ${images.length} screenshots are different screens of the SAME single run (one workout split across screens, in any order). Merge them into one record; do not add distances or times together. ` : '') + 'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
+              (images.length > 1 ? `These ${images.length} screenshots belong to ONE training run. Either they are different screens of the same workout (same distance and time: merge into one record), or they are separate workouts the watch recorded for the same run (different distance and time, e.g. the run was split in two): then fill segments with one entry per workout and leave the top-level distance, duration, pace and heart-rate fields null. Never report a conflict; always return usable numbers. ` : '') + 'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
               'Convert miles to km if needed. Keep notes empty unless a recorded number might be wrong; extra data on the screen that has no field is simply ignored. Pace must be seconds per km. If the screenshot shows several screens, combine them. ' +
               'If a value is not visible, use null. Do not invent numbers.',
           },
@@ -81,7 +101,7 @@ async function extractRun(images) {
     ],
   }, 'record_run');
   if (!tool) throw new Error('The model did not return a run record.');
-  const r = tool.input;
+  const r = mergeSegments(tool.input);
   r.notes = typeof r.notes === 'string' && r.notes.length <= 140 ? r.notes.trim() : '';
   // derive missing pieces from the ones we have
   if (!r.avg_pace_sec_per_km && r.distance_km && r.duration_sec) r.avg_pace_sec_per_km = Math.round(r.duration_sec / r.distance_km);
@@ -322,4 +342,5 @@ async function chat(store, today, history, userText) {
   return { text: text || (changes ? changes.proposal.coach_note : '...'), changes };
 }
 
-module.exports = { extractRun, reviewRun, fallbackReview, applyChanges, chat, hasKey, MODEL };
+module.exports = {
+  mergeSegments, extractRun, reviewRun, fallbackReview, applyChanges, chat, hasKey, MODEL };
