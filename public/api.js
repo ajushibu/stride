@@ -65,7 +65,7 @@
     signedIn: () => !!getSession(),
     state: () => request('GET', '/api/state'),
     saveProfile: (b) => request('PUT', '/api/profile', b),
-    extract(file) { const f = new FormData(); f.append('image', file); return request('POST', '/api/runs/extract', f, true); },
+    extract(files) { const f = new FormData(); [].concat(files).forEach((x) => f.append('image', x)); return request('POST', '/api/runs/extract', f, true); },
     logRun: (b) => request('POST', '/api/runs', b),
     deleteRun: (id) => request('DELETE', '/api/runs/' + encodeURIComponent(id)),
     skip: (id, reason) => request('POST', '/api/sessions/' + encodeURIComponent(id) + '/skip', { reason }),

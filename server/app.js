@@ -104,11 +104,11 @@ app.put('/api/profile', wrap(async (req, res) => {
 }));
 
 /* ---------- run logging ---------- */
-app.post('/api/runs/extract', upload.single('image'), wrap(async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'no_image', message: 'Attach a screenshot.' });
+app.post('/api/runs/extract', upload.array('image', 4), wrap(async (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ error: 'no_image', message: 'Attach a screenshot.' });
   const okTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-  if (!okTypes.includes(req.file.mimetype)) return res.status(400).json({ error: 'bad_type', message: 'Use a PNG, JPG or WebP screenshot.' });
-  const extracted = await coach.extractRun(req.file.buffer, req.file.mimetype);
+  if (req.files.some((f) => !okTypes.includes(f.mimetype))) return res.status(400).json({ error: 'bad_type', message: 'Use a PNG, JPG or WebP screenshot.' });
+  const extracted = await coach.extractRun(req.files.map((f) => ({ buffer: f.buffer, mediaType: f.mimetype })));
 
   const store = req.store;
   const t = todayOf(store);

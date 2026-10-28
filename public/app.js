@@ -394,11 +394,11 @@
     const el = $('#log-sheet');
     if (L.step === 1) {
       el.innerHTML = sheetHead('Log your run', 'Upload the summary screenshot from your Galaxy Watch') + stepper(1) +
-        '<div class="sheet__body"><label class="dropzone" id="dropzone"><input type="file" id="shot" accept="image/*"><span class="dropzone__icon">' + I('upload') + '</span><span class="dropzone__title">Choose a screenshot</span><span class="dropzone__hint">Distance, time, pace and heart rate are read for you. You confirm before anything changes.</span></label></div>' +
+        '<div class="sheet__body"><label class="dropzone" id="dropzone"><input type="file" id="shot" accept="image/*" multiple><span class="dropzone__icon">' + I('upload') + '</span><span class="dropzone__title">Choose screenshot(s)</span><span class="dropzone__hint">Run split across several screens? Select them all at once (up to 4). You confirm before anything changes.</span></label></div>' +
         '<div class="sheet__foot"><button class="btn btn--soft btn--block" data-act="manual">' + I('edit', { size: 20 }) + 'Enter it manually instead</button></div>';
     } else if (L.step === 2) {
       el.innerHTML = sheetHead('Reading your run', 'This takes a few seconds') + stepper(2) +
-        '<div class="sheet__body"><div class="preview"><img class="preview__img" src="' + L.previewUrl + '" alt="Your screenshot"><div class="preview__info"><div class="preview__name">' + esc(L.file.name) + '</div><div class="preview__size">' + Math.round(L.file.size / 1024) + ' KB</div></div></div>' +
+        '<div class="sheet__body"><div class="preview"><img class="preview__img" src="' + L.previewUrl + '" alt="Your screenshot"><div class="preview__info"><div class="preview__name">' + (L.files.length > 1 ? L.files.length + ' screenshots' : esc(L.files[0].name)) + '</div><div class="preview__size">' + Math.round(L.files.reduce((a, f) => a + f.size, 0) / 1024) + ' KB</div></div></div>' +
         '<div class="scan"><div class="spinner" role="status"></div><div><b>Reading the numbers…</b><p class="muted">Checking distance, time, pace and heart rate</p></div></div>' +
         '<div class="stack stack--sm" style="margin-top:14px"><div class="skeleton skeleton--card"></div></div></div>';
     } else {
@@ -456,29 +456,30 @@
       : 'Planned for ' + F.dateLong(s.date) + ', and you ran it ' + Math.abs(d) + (Math.abs(d) === 1 ? ' day ' : ' days ') + (d > 0 ? 'later' : 'earlier') + '. It counts as done, and the coach will check the days around it.';
   }
 
-  function compressImage(file) {
+  function compressImage(file, maxPx) {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const max = 1600, sc = Math.min(1, max / Math.max(img.width, img.height));
+        const max = maxPx || 1600, sc = Math.min(1, max / Math.max(img.width, img.height));
         const c = document.createElement('canvas');
         c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        c.toBlob((b) => { URL.revokeObjectURL(url); resolve(b ? new File([b], 'run.jpg', { type: 'image/jpeg' }) : file); }, 'image/jpeg', 0.9);
+        c.toBlob((b) => { URL.revokeObjectURL(url); resolve(b ? new File([b], 'run.jpg', { type: 'image/jpeg' }) : file); }, 'image/jpeg', 0.85);
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
       img.src = url;
     });
   }
 
-  async function onShot(file) {
-    if (!file) return;
-    L.file = file;
-    L.previewUrl = URL.createObjectURL(file);
+  async function onShot(list) {
+    const files = Array.from(list || []).filter((f) => /^image\//.test(f.type)).slice(0, 4);
+    if (!files.length) return;
+    L.files = files;
+    L.previewUrl = URL.createObjectURL(files[0]);
     L.step = 2; renderLog();
     try {
-      const small = await compressImage(file);
+      const small = await Promise.all(files.map((f) => compressImage(f, files.length > 1 ? 1400 : 1600)));
       const r = await API.extract(small);
       L.ex = r.extracted; L.suggested = r.suggested_session_id; L.manual = false;
       L.step = 3; renderLog();
@@ -654,7 +655,7 @@
   });
 
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'shot') onShot(e.target.files[0]);
+    if (e.target.id === 'shot') onShot(e.target.files);
     if (e.target.id === 'f-date') fillSessionSelect(($('#f-session') || {}).value || null);
     if (e.target.id === 'f-session') updateSessionHint();
   });
@@ -680,7 +681,7 @@
   // drag and drop onto the dropzone
   document.addEventListener('dragover', (e) => { const z = e.target.closest('#dropzone'); if (z) { e.preventDefault(); z.classList.add('is-over'); } });
   document.addEventListener('dragleave', (e) => { const z = e.target.closest('#dropzone'); if (z) z.classList.remove('is-over'); });
-  document.addEventListener('drop', (e) => { const z = e.target.closest('#dropzone'); if (z) { e.preventDefault(); z.classList.remove('is-over'); onShot(e.dataTransfer.files[0]); } });
+  document.addEventListener('drop', (e) => { const z = e.target.closest('#dropzone'); if (z) { e.preventDefault(); z.classList.remove('is-over'); onShot(e.dataTransfer.files); } });
 
   async function init() {
     try {

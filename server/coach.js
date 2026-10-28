@@ -59,7 +59,7 @@ const RECORD_RUN = {
   },
 };
 
-async function extractRun(buffer, mediaType) {
+async function extractRun(images) {
   const tool = await callTool({
     model: MODEL,
     max_tokens: 1024,
@@ -68,11 +68,11 @@ async function extractRun(buffer, mediaType) {
       {
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') } },
+          ...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.buffer.toString('base64') } })),
           {
             type: 'text',
             text:
-              'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
+              (images.length > 1 ? `These ${images.length} screenshots are different screens of the SAME single run (one workout split across screens, in any order). Merge them into one record; do not add distances or times together. ` : '') + 'This is a screenshot from a Samsung Galaxy Watch / Samsung Health running summary. You must call the record_run tool with what you can read. ' +
               'Convert miles to km if needed. Keep notes empty unless a recorded number might be wrong; extra data on the screen that has no field is simply ignored. Pace must be seconds per km. If the screenshot shows several screens, combine them. ' +
               'If a value is not visible, use null. Do not invent numbers.',
           },
