@@ -323,23 +323,36 @@ function fallbackReview(store, today, run) {
 
 async function chat(store, today, history, userText) {
   const ctx = planContext(store, today);
-  const messages = [...history.slice(-20).map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: userText }];
-  const res = await api().messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    system:
-      SYSTEM +
-      `\nYou are chatting with the runner. Answer in at most ~120 words unless they ask for detail. ` +
-      `If they ask for a plan change (travel, illness, soreness, time constraints), call update_plan with the minimal justified change and also explain it in text. ` +
-      `If it is only a question, just answer.\n\nCURRENT STATE:\n${JSON.stringify(ctx)}`,
-    tools: [UPDATE_PLAN],
-    messages,
+  // drop empty / placeholder replies from earlier failures so they don't teach the model to answer "..."
+  const clean = history.slice(-20).filter((m) => m.content && m.content.trim() && m.content.trim() !== '...');
+  const messages = [];
+  for (const m of clean) {
+    if (messages.length && messages[messages.length - 1].role === m.role) messages[messages.length - 1].content += '\n' + m.content;
+    else messages.push({ role: m.role, content: m.content });
+  }
+  while (messages.length && messages[0].role !== 'user') messages.shift();
+  if (messages.length && messages[messages.length - 1].role === 'user') messages[messages.length - 1].content += '\n' + userText;
+  else messages.push({ role: 'user', content: userText });
+  const system =
+    SYSTEM +
+    `\nYou are chatting with the runner. Answer in at most ~120 words unless they ask for detail. ` +
+    `Always write a text reply to the runner. If they ask for a plan change (travel, illness, soreness, time constraints, a missed week), also call update_plan with the minimal justified change (an empty session_changes list is fine) and explain it in your text. ` +
+    `If it is only a question, just answer.\n\nCURRENT STATE:\n${JSON.stringify(ctx)}`;
+  let res = await api().messages.create({ model: MODEL, max_tokens: 4000, system, tools: [UPDATE_PLAN], messages });
+  const pick = (r) => ({
+    text: r.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim(),
+    tool: r.content.find((b) => b.type === 'tool_use'),
   });
-  const text = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-  const tool = res.content.find((b) => b.type === 'tool_use');
+  let { text, tool } = pick(res);
+  if (!text && !tool) {
+    res = await api().messages.create({ model: MODEL, max_tokens: 4000, system, tools: [UPDATE_PLAN], messages: [...messages, { role: 'assistant', content: 'Let me answer that.' }, { role: 'user', content: 'Please reply to me in plain text now.' }].slice(0) });
+    ({ text, tool } = pick(res));
+  }
   let changes = null;
   if (tool) changes = { proposal: tool.input, ...applyChanges(store, today, tool.input) };
-  return { text: text || (changes ? changes.proposal.coach_note : '...'), changes };
+  const out = text || (changes && changes.proposal.coach_note) || '';
+  if (!out) { const e = new Error('The coach didn’t reply. Try sending that again.'); e.status = 502; throw e; }
+  return { text: out, changes };
 }
 
 module.exports = {
