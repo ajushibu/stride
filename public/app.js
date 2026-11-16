@@ -43,12 +43,6 @@
       '<button class="icon-btn" data-act="settings" aria-label="Settings">' + I('menu') + '</button></div></header>';
   }
 
-  function greeting() {
-    const h = new Date().getHours();
-    const g = h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening';
-    return g + (S.profile.name ? ', ' + esc(S.profile.name) : '');
-  }
-
   const hrText = (s) => {
     if (s.type === 'race' || !s.hr_hi) return null;
     if (s.type === 'tempo' && s.hr_lo) return { z: 'Z4', r: s.hr_lo + '–' + s.hr_hi };
@@ -72,39 +66,59 @@
   }
 
   /* ------------------------------------------------------------------ TODAY */
-  function heroCard() {
-    const sm = S.summary;
-    let s = sm.today_session;
-    let eyebrow = F.dateShort(todayStr());
-    let lead = '';
-    if (!s) { s = sm.next_session; if (s) { lead = 'Rest day today'; eyebrow = F.dayShort(s.date) + ' ' + F.dateShort(s.date); } }
-    if (!s) return '<article class="card run-hero" data-type="rest"><div class="run-hero__dist"><span class="num">Done</span></div><p class="run-hero__what">No more sessions in the plan.</p></article>';
+  const hstat = (v, u, l, tone) => '<div class="hstat' + (tone ? ' hstat--' + tone : '') + '"><span class="num">' + v + (u ? '<span class="num__unit">' + u + '</span>' : '') + '</span><small>' + esc(l) + '</small></div>';
 
-    const done = s.status === 'done';
+  function heroCard() {
+    const sm = S.summary, t = todayStr();
+    let s = sm.today_session, rest = false;
+    if (!s) { s = sm.next_session; rest = true; }
+    if (!s) return '<article class="card hero" data-type="rest"><p class="hero__note">No more sessions in the plan.</p></article>';
     const type = TYPE_ATTR[s.type] || 'easy';
-    const run = done ? runFor(s.id) : null;
-    const pill = '<span class="pill pill--type" data-type="' + type + '">' + esc(lead ? 'Next: ' + (s.title || F.typeLabel(s.type)) : s.title || F.typeLabel(s.type)) + '</span>';
-    const hr = hrText(s);
-    const paceCell = s.pace_lo
-      ? '<div class="meta-cell"><span class="label">Target pace</span><span class="num">' + F.pace(Math.round((s.pace_lo + s.pace_hi) / 2)) + '<span class="num__unit">/km</span></span><small>' + (s.type === 'tempo' ? 'tempo block' : F.paceRange(s.pace_lo, s.pace_hi)) + '</small></div>'
-      : '<div class="meta-cell"><span class="label">Effort</span><span class="num">Hard</span><small>even pacing</small></div>';
-    const hrCell = hr
-      ? '<div class="meta-cell"><span class="label">Heart rate</span><span class="num">' + hr.z + '<span class="num__unit">' + hr.r + '</span></span><small>bpm</small></div>'
-      : '<div class="meta-cell"><span class="label">Heart rate</span><span class="num">Feel</span><small>no cap</small></div>';
-    const why = s.coach_edited
-      ? '<b>Coach adjusted this:</b> ' + esc(s.note)
-      : '<b>Why ' + esc(F.typeLabel(s.type).toLowerCase()) + ':</b> ' + esc((WHY[s.type] || WHY.easy)(s));
-    const doneLine = done && run
-      ? '<div class="coach-note"><span class="avatar">' + I('check') + '</span><p><b>Done:</b> ' + F.km(run.distance_km) + ' km at ' + F.pace(run.avg_pace_sec) + '/km' + (run.avg_hr ? ', avg HR ' + run.avg_hr : '') + '.</p></div>'
-      : '';
-    return '<article class="card run-hero" data-type="' + type + '"><div class="run-hero__top">' + pill +
-      '<span class="label">' + esc(done ? 'Completed' : lead || eyebrow) + '</span></div>' +
-      '<div class="run-hero__dist"><span class="num">' + F.km(s.km) + '</span><span class="unit">km</span></div>' +
-      '<p class="run-hero__what">' + esc(done ? F.dateLong(s.date) : s.note) + '</p>' +
-      '<div class="run-hero__meta">' + paceCell + hrCell + '</div>' +
-      (done ? doneLine : '<div class="coach-note"><span class="avatar">' + I('sparkle') + '</span><p>' + why + '</p></div>') +
-      (lead && canMoveToday(s) ? '<button class="btn btn--primary btn--block hero-move" data-move="' + s.id + '" data-to="' + todayStr() + '">' + I('run', { size: 22 }) + 'Run it today instead</button>' : '') +
+    const run = s.status === 'done' ? runFor(s.id) : null;
+    const hr = hrText(s), cap = s.hr_hi;
+    const dd = dayDiff(s.date, t);
+    const when = rest ? (dd === 1 ? 'Tomorrow' : F.dayShort(s.date) + ' ' + F.dateShort(s.date))
+      : run ? 'Done' : s.status === 'skipped' ? 'Skipped' : 'Today';
+    let dist, stats, note;
+    if (run) {
+      const over = run.avg_hr && cap ? run.avg_hr - cap : null;
+      dist = F.km(run.distance_km);
+      stats = hstat(F.pace(run.avg_pace_sec), '/km', 'avg pace') +
+        hstat(run.avg_hr || '–', run.avg_hr ? 'bpm' : '', over == null ? 'avg HR' : over > 0 ? over + ' over cap' : 'under cap', over == null ? '' : over > 0 ? 'bad' : 'ok');
+      note = 'Planned ' + F.km(s.km) + ' km' + (s.pace_lo ? ' at ' + F.paceRange(s.pace_lo, s.pace_hi) + '/km' : '') + (cap ? ', HR ≤' + cap : '') + '.';
+      note = esc(note);
+    } else {
+      dist = F.km(s.km);
+      stats = (s.pace_lo ? hstat(F.pace(Math.round((s.pace_lo + s.pace_hi) / 2)), '/km', s.type === 'tempo' ? 'tempo block' : F.paceRange(s.pace_lo, s.pace_hi)) : hstat('Hard', '', 'even pacing')) +
+        (hr ? hstat(hr.r, 'bpm', s.type === 'tempo' ? 'heart rate' : 'HR cap') : hstat('Feel', '', 'no HR cap'));
+      note = s.coach_edited ? '<b>Coach adjusted:</b> ' + esc(s.note) : esc((WHY[s.type] || WHY.easy)(s));
+    }
+    return '<article class="card hero" data-type="' + type + '">' +
+      '<div class="hero__top"><span class="pill pill--type" data-type="' + type + '">' + esc(s.title || F.typeLabel(s.type)) + '</span>' +
+      '<span class="hero__when' + (run ? ' is-done' : '') + '">' + (run ? I('check', { size: 16 }) : '') + esc(when) + '</span></div>' +
+      '<div class="hero__body"><div class="hero__dist"><span class="num">' + dist + '</span><span class="unit">km</span></div><div class="hero__stats">' + stats + '</div></div>' +
+      '<p class="hero__note">' + note + '</p>' +
+      (rest && canMoveToday(s) ? '<button class="btn btn--ghost btn--block hero-move" data-move="' + s.id + '" data-to="' + t + '">' + I('run', { size: 22 }) + 'Run it today instead</button>' : '') +
       '</article>';
+  }
+
+  function weekCard() {
+    const wp = S.summary.week_progress, cw = currentWeek();
+    if (!cw) return '';
+    const left = cw.sessions.filter((x) => x.status === 'planned' && x.date >= todayStr()).length;
+    return '<section class="card weekcard" aria-label="This week ' + wp.pct + ' percent complete">' +
+      '<div class="weekcard__gauge">' + UI.arcGauge({ pct: wp.pct, value: wp.pct + '%' }) + '</div>' +
+      '<div class="weekcard__text"><span class="label">This week</span>' +
+      '<div class="weekcard__km"><span class="num">' + F.km(wp.done_km) + '</span><span class="weekcard__of">/ ' + F.km(wp.planned_km) + ' km</span></div>' +
+      '<small>Week ' + cw.n + ' · ' + esc(cw.phase) + ' · ' + (left ? left + (left === 1 ? ' run' : ' runs') + ' to go' : 'all done') + '</small></div></section>';
+  }
+
+  function dayTitle() {
+    const s = S.summary.today_session;
+    if (!s) return 'Rest day';
+    if (s.status === 'done') return 'Done for today';
+    if (s.status === 'skipped') return 'Skipped today';
+    return s.type === 'long' ? 'Long run day' : s.type === 'race' ? (s.km > 30 ? 'Race day' : 'Test day') : 'Run day';
   }
 
   // An upcoming planned session can be pulled to today when today has no run of its own.
@@ -144,28 +158,12 @@
   }
 
   function renderToday() {
-    const sm = S.summary, wp = sm.week_progress;
-    const cw = currentWeek();
-    const hero = heroCard();
-
-    // long run comparison
-    const longs = S.runs.filter((r) => { const s = r.session_id && findSession(r.session_id); return s && s.type === 'long'; });
-    const prevLong = longs.length ? longs[longs.length - 1].distance_km : S.profile.baseline.longest_km;
-    const thisLongS = cw ? cw.sessions.find((s) => s.type === 'long' || (s.type === 'race' && s.km >= 10)) : null;
-    const thisLong = thisLongS ? thisLongS.km : 0;
-    const seg = (km) => Math.min(14, Math.round(km / 2.5));
-
-    // 7-day average HR
-    const wk = S.runs.filter((r) => r.date > F.addDays(todayStr(), -7) && r.avg_hr);
-    const avgHr = wk.length ? Math.round(wk.reduce((a, r) => a + r.avg_hr, 0) / wk.length) : null;
-    const cap = S.profile.hr.easy_cap;
-    const hrFill = avgHr ? Math.max(1, Math.min(8, Math.round(((200 - avgHr) / 70) * 8))) : 0;
-
     const lr = lastRun();
-    const feedback = lr && lr.review
-      ? '<div class="card note-card"><span class="avatar">' + I('sparkle') + '</span><div><div class="row" style="gap:8px;margin-bottom:6px"><span class="label">Latest coach note</span>' +
-        '<span class="pill ' + (lr.review.verdict === 'caution' || lr.review.verdict === 'behind' ? 'pill--warn' : 'pill--ok') + '">' + esc(({ ahead: 'Ahead', on_track: 'On track', behind: 'Behind', caution: 'Caution' })[lr.review.verdict] || '') + '</span></div>' +
-        '<p>' + esc(lr.review.coach_note) + '</p></div></div>'
+    const verdict = lr && lr.review ? ({ ahead: ['Ahead', 'ok'], on_track: ['On track', 'ok'], behind: ['Behind', 'warn'], caution: ['Caution', 'warn'] })[lr.review.verdict] : null;
+    const feedback = lr && lr.review && lr.review.coach_note
+      ? '<article class="card cnote" data-act="expand-note" role="button" tabindex="0" aria-expanded="false"><div class="cnote__head"><span class="avatar">' + I('sparkle') + '</span><span class="label">Coach · ' + esc(F.dateShort(lr.date)) + '</span>' +
+        (verdict ? '<span class="pill pill--' + verdict[1] + '">' + verdict[0] + '</span>' : '') + '</div>' +
+        '<p class="cnote__text">' + esc(lr.review.coach_note) + '</p></article>'
       : '';
 
     const missed = allSessions().filter((s) => s.status === 'planned' && s.date < todayStr() && s.date >= F.addDays(todayStr(), -7) && s.type !== 'race')
@@ -176,26 +174,17 @@
           '<div class="missed-actions"><button class="btn btn--soft btn--sm" data-sess-log="' + s.id + '">Log it</button><button class="btn btn--ghost btn--sm" data-sess-skip="' + s.id + '">Missed</button></div></div>').join('') + '</div></div>'
       : '';
 
-    $('#screen-today').innerHTML =
-      hdr(F.dayShort(todayStr()) + ' ' + F.dateShort(todayStr()), greeting()) +
-      '<div class="stack">' +
-      UI.arcGauge({ pct: wp.pct, value: wp.pct, unit: 'PERCENT', label: 'WEEK COMPLETE', caption: '<span class="delta"><b>' + F.km(wp.done_km) + '</b> of ' + F.km(wp.planned_km) + ' km</span>' }) +
-      '<div class="section-title">' + (sm.today_session ? 'Today’s run' : 'Next run') + ' <small>' + (cw ? 'Week ' + cw.n + ' · ' + esc(cw.phase) : '') + '</small></div>' +
-      hero + missedCard + feedback + weekStripHtml() +
-      '<div class="grid-2">' +
-      '<div class="card stat-card"><div class="card__head"><span class="card__icon" style="--c:var(--mint)">' + I('run') + '</span><span class="card__title">Weekly km</span></div><div class="stat-card__body stat-card__body--center">' +
-      UI.ring({ pct: wp.pct, size: 118, stroke: 14, color: 'var(--mint)', center: '<b class="num">' + F.km(wp.done_km) + '</b><small>of ' + F.km(wp.planned_km) + ' km</small>', ariaLabel: wp.pct + ' percent of weekly distance' }) + '</div></div>' +
-      '<div class="card stat-card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('mountain') + '</span><span class="card__title">Long run</span></div>' +
-      '<div class="stat-card__body" style="flex-direction:row;gap:14px;align-items:flex-end;justify-content:space-between">' +
-      '<div style="flex:1"><div class="stat-pair"><b class="magenta">' + F.km(prevLong) + '</b></div>' + UI.slantBar({ vertical: true, segments: 14, filled: seg(prevLong), tone: 'magenta', label: 'Last long run ' + F.km(prevLong) + ' km' }) + '</div>' +
-      '<div style="flex:1"><div class="stat-pair"><b class="teal">' + (thisLong ? F.km(thisLong) : '–') + '</b></div>' + UI.slantBar({ vertical: true, segments: 14, filled: seg(thisLong), tone: 'teal', label: 'This week ' + F.km(thisLong) + ' km' }) + '</div>' +
-      '</div><div class="card__foot"><span>Last</span><span>' + (thisLongS ? F.dayShort(thisLongS.date) : 'Next') + '</span></div></div></div>' +
-      '<div class="card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('heart') + '</span><span class="card__title">Avg heart rate</span><span class="card__meta">7 days</span></div>' +
+    const wk = S.runs.filter((r) => r.date > F.addDays(todayStr(), -7) && r.avg_hr);
+    const avgHr = wk.length ? Math.round(wk.reduce((a, r) => a + r.avg_hr, 0) / wk.length) : null;
+    const cap = S.profile.hr.easy_cap, over = avgHr ? avgHr - cap : null;
+    const hrCard = '<div class="card"><div class="card__head"><span class="card__icon" style="--c:var(--magenta)">' + I('heart') + '</span><span class="card__title">Average heart rate</span><span class="card__meta">Last 7 days</span></div>' +
       '<div class="row row--between" style="align-items:flex-end"><span class="num num--lg">' + (avgHr || '–') + '<span class="num__unit">bpm</span></span>' +
-      '<div style="width:46%;padding-bottom:6px">' + UI.slantBar({ segments: 8, filled: hrFill, tone: avgHr && avgHr > cap + 5 ? 'magenta' : 'mint', size: 'md', label: avgHr ? 'Average heart rate ' + avgHr : 'No heart rate data' }) + '</div></div>' +
-      '<div class="card__foot"><span>' + (avgHr ? (avgHr <= cap ? 'Under your easy cap' : 'Above your easy cap') : 'Log a run to see this') + '</span><span>Easy cap ' + cap + '</span></div></div>' +
-      '<button class="btn btn--primary btn--block" data-act="log">' + I('run', { size: 22 }) + 'Log this run</button>' +
-      '</div>';
+      (avgHr ? '<span class="pill ' + (over > 0 ? 'pill--bad">' + over + ' over cap' : 'pill--ok">Under cap') + '</span>' : '') + '</div>' +
+      '<div class="card__foot"><span>' + (avgHr ? 'Easy runs should stay at or under ' + cap + ' bpm.' : 'Log a run with heart rate to see this.') + '</span></div></div>';
+
+    $('#screen-today').innerHTML =
+      hdr(F.dayShort(todayStr()) + ' ' + F.dateShort(todayStr()), esc(dayTitle())) +
+      '<div class="stack">' + weekCard() + heroCard() + feedback + missedCard + weekStripHtml() + hrCard + '</div>';
   }
 
   /* ------------------------------------------------------------------ PLAN */
@@ -260,15 +249,14 @@
     const w = currentWeek();
     const span = ws.slice(Math.max(0, idx - 4), idx + 4);
 
-    const trio = '<div class="trio">' +
-      '<div class="trio__item trio__item--gold"><span class="trio__badge">' + I('trophy') + '</span><span class="trio__num">' + sm.streak.best + '</span><span class="trio__unit">runs</span><span class="trio__label">Best streak</span></div>' +
-      '<div class="trio__item trio__item--violet"><span class="trio__badge">' + I('run') + '</span><span class="trio__num">' + sm.total_runs + '</span><span class="trio__unit">runs</span><span class="trio__label">Total runs</span></div>' +
-      '<div class="trio__item trio__item--flame"><span class="trio__badge">' + I('flame') + '</span><span class="trio__num">' + sm.streak.current + '</span><span class="trio__unit">runs</span><span class="trio__label">Current streak</span></div></div>';
+    const stat = (v, unit, label) => '<div class="istat"><b>' + v + (unit ? '<small>' + unit + '</small>' : '') + '</b><span>' + label + '</span></div>';
+    const readiness = '<div class="card">' + UI.arcGauge({ variant: 'dash', pct: rd.score, value: rd.score, status: rd.label, label: 'RACE READINESS', glyph: 'run', ariaLabel: 'Race readiness ' + rd.score + ' out of 100' }) +
+      '<div class="istats">' +
+      stat(F.km(rd.longest_km), ' / 32 km', 'Longest run') + stat(F.km(rd.weekly_km_4w), ' / 45 km', 'Weekly avg, 4 wk') + stat(rd.consistency, '%', 'Sessions done') +
+      stat(sm.streak.current, '', 'Current streak') + stat(sm.streak.best, '', 'Best streak') + stat(sm.total_runs, '', 'Runs logged') +
+      '</div></div>';
 
-    const readiness = '<div class="card">' + UI.arcGauge({ variant: 'dash', pct: rd.score, value: rd.score, status: rd.label, label: 'RACE READINESS', glyph: 'run', ariaLabel: 'Race readiness ' + rd.score + ' out of 100' }) + trio +
-      '<div class="kv"><div><b>' + F.km(rd.longest_km) + '<small> km</small></b><span>Longest run (goal 32)</span></div><div><b>' + F.km(rd.weekly_km_4w) + '<small> km</small></b><span>Weekly avg, 4 wks (goal 45)</span></div><div><b>' + rd.consistency + '<small>%</small></b><span>Sessions done, 4 wks</span></div></div></div>';
-
-    const weekly = '<div class="card card--cream"><div class="row row--between" style="align-items:flex-end"><div><span class="label">Your week</span><div class="num num--sm" style="margin-top:6px">' + (w ? esc(F.dateShort(w.start) + ' – ' + F.dateShort(F.addDays(w.start, 6))) : '') + '</div></div>' +
+    const weekly = '<div class="card"><div class="row row--between" style="align-items:flex-end"><div><span class="label">Your week</span><div class="num num--sm" style="margin-top:6px">' + (w ? esc(F.dateShort(w.start) + ' – ' + F.dateShort(F.addDays(w.start, 6))) : '') + '</div></div>' +
       '<span class="num num--lg">' + F.km(sm.week_progress.done_km) + '<span class="num__unit">km</span></span></div>' +
       UI.weekBars({ step: 5, items: span.map((x) => ({ label: x.n === cw ? 'NOW' : 'W' + x.n, value: x.n > cw ? null : Math.round(x.km), plan: Math.round(x.plan), state: x.n === cw ? 'current' : 'done' })), ariaLabel: 'Weekly kilometres, done versus planned' }) + '</div>';
 
@@ -298,12 +286,15 @@
       lastFour.map((x, i) => '<div class="bar-row' + (i === lastFour.length - 1 ? ' is-current' : '') + '"><span class="bar-row__lbl">Wk ' + x.n + '</span>' + UI.slantBar({ segments: 16, filled: Math.round((x.longest / 32) * 16), tone: i === lastFour.length - 1 ? 'teal' : 'mint', size: 'sm', label: F.km(x.longest) + ' of 32 km' }) + '<span class="bar-row__val">' + (x.longest ? F.km(x.longest) + ' km' : '–') + '</span></div>').join('') + '</div></article>';
 
     const hist = S.runs.length
-      ? '<div class="section-title">Run history <small>' + S.runs.length + (S.runs.length === 1 ? ' run' : ' runs') + '</small></div><div class="card"><div class="stack stack--sm">' +
-        S.runs.slice().reverse().slice(0, 12).map((r) => '<div class="row row--between"><div><b>' + F.km(r.distance_km) + ' km</b> <span class="muted">· ' + F.pace(r.avg_pace_sec) + '/km' + (r.avg_hr ? ' · ' + r.avg_hr + ' bpm' : '') + '</span>' + (r.notes ? '<div class="hint run-note">' + esc(r.notes) + '</div>' : '') + '</div><span class="muted">' + esc(F.dateShort(r.date)) + '</span></div>').join('') + '</div></div>'
+      ? '<div class="section-title">Run history <small>' + S.runs.length + (S.runs.length === 1 ? ' run' : ' runs') + '</small></div><div class="card card--list"><div class="hlist">' +
+        S.runs.slice().reverse().slice(0, 12).map((r) => '<div class="hrow"><div class="hrow__date"><b>' + esc(F.dateShort(r.date).split(' ')[0]) + '</b><span>' + esc(F.dateShort(r.date).split(' ')[1]) + '</span></div><div class="hrow__main"><div><b>' + F.km(r.distance_km) + ' km</b><span class="muted"> · ' + F.pace(r.avg_pace_sec) + '/km' + (r.avg_hr ? ' · ' + r.avg_hr + ' bpm' : '') + '</span></div>' + (r.notes ? '<div class="hint run-note">' + esc(r.notes) + '</div>' : '') + '</div></div>').join('') + '</div></div>'
       : '';
 
+    const trends = havePace || haveHr ? paceCard + hrCard
+      : '<article class="card"><div class="istats istats--2"><div class="istat"><b>' + (pv ? F.pace(pv) : '–') + '<small> /km</small></b><span>Avg pace</span></div><div class="istat"><b>' + (hv || '–') + '<small> bpm</small></b><span>Avg heart rate</span></div></div>' +
+        '<p class="hint" style="margin-top:14px">Pace and heart-rate trends appear once you have runs in two different weeks.</p></article>';
     $('#screen-insights').innerHTML = hdr(Math.max(0, sm.days_to_race) + ' days to race', 'Insights', 'nostreak') + '<div class="stack">' + readiness +
-      '<div class="section-title">Weekly <small>done vs planned</small></div>' + weekly + paceCard + hrCard + longCard + hist + '</div>';
+      '<div class="section-title">Weekly <small>done vs planned</small></div>' + weekly + '<div class="section-title">Trends <small>last 8 weeks</small></div>' + trends + longCard + hist + '</div>';
   }
 
   /* ------------------------------------------------------------------ COACH */
@@ -332,8 +323,8 @@
       (S.ai.enabled ? '' : '<div class="banner" style="margin:0 0 10px">The AI coach is switched off because the server has no API key. Logging runs still works with basic feedback.</div>') +
       '<div class="chat" id="chat">' + msgs + typingRow + '</div>' +
       '<div class="chips" role="group">' + chips.map((c) => '<button class="chip" data-chip="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
-      '<div class="composer"><button class="icon-btn" data-act="log" aria-label="Attach screenshot">' + I('clip') + '</button>' +
-      '<label class="composer__field"><span class="sr-only">Message</span><input class="composer__input" id="chat-input" placeholder="Ask your coach..." autocomplete="off" enterkeyhint="send"></label>' +
+      '<div class="composer">' +
+      '<label class="composer__field"><span class="sr-only">Message</span><input class="composer__input" id="chat-input" placeholder="Ask your coach…" autocomplete="off" enterkeyhint="send"></label>' +
       '<button class="icon-btn icon-btn--green" id="chat-send" aria-label="Send">' + I('send') + '</button></div>';
     const chat = $('#chat');
     if (chat) chat.scrollTop = chat.scrollHeight;
@@ -426,28 +417,30 @@
       const t = ex.duration_sec != null ? F.hms(ex.duration_sec) : '';
       const date = ex.date || todayStr();
       const warn = (v) => (!L.manual && (v == null || v === '') ? ' is-warn' : '');
-      const field = (id, label, val, unit, extra, mode) => '<label class="field-card' + (extra || '') + '"><span class="label">' + label + '</span><span class="field-card__row"><input class="field-card__input" id="' + id + '" value="' + esc(val == null ? '' : val) + '" inputmode="' + (mode || 'decimal') + '" autocomplete="off"><span class="field-card__unit">' + unit + '</span></span></label>';
+      const field = (id, label, val, unit, extra, mode) => '<label class="field-card' + (extra || '') + '"><span class="label">' + label + '</span><span class="field-card__row"><input class="field-card__input" id="' + id + '" value="' + esc(val == null ? '' : val) + '" inputmode="' + (mode || 'decimal') + '" placeholder="' + (({ 'f-dist': '0.0', 'f-time': 'h:mm:ss', 'f-pace': 'm:ss' })[id] || '–') + '" autocomplete="off"><span class="field-card__unit">' + unit + '</span></span></label>';
       el.innerHTML = sheetHead('Confirm your run', L.manual ? 'Enter the numbers from your watch' : 'Check what I read. Tap any value to fix it.') + stepper(3) +
         '<div class="sheet__body">' +
         (ex.notes && !L.manual && ex.notes.length <= 140 ? '<div class="banner" style="margin-bottom:12px">' + esc(ex.notes) + '</div>' : '') +
         (ex.is_run === false ? '<div class="banner banner--error" style="margin-bottom:12px">This doesn’t look like a running workout. Check the screenshot.</div>' : '') +
         '<div class="field-grid">' +
-        '<label class="field-card field-card--wide"><span class="label">Date</span><span class="field-card__row"><input class="field-card__input" id="f-date" type="date" value="' + date + '" max="' + todayStr() + '"></span></label>' +
+        '<label class="field-card field-card--wide field-card--date"><span class="label">Date</span><span class="field-card__row"><span class="date-show" id="f-date-show">' + esc(dateNice(date)) + '</span>' + I('calendar', { size: 22 }) + '</span><input class="date-native" id="f-date" type="date" value="' + date + '" max="' + todayStr() + '" aria-label="Run date"></label>' +
         field('f-dist', 'Distance', ex.distance_km, 'km', warn(ex.distance_km)) +
         field('f-time', 'Time', t, '', warn(ex.duration_sec), 'text') +
         field('f-pace', 'Avg pace', ex.avg_pace_sec_per_km ? F.pace(ex.avg_pace_sec_per_km) : '', '/km', warn(ex.avg_pace_sec_per_km), 'text') +
         field('f-hr', 'Avg HR', ex.avg_hr, 'bpm', warn(ex.avg_hr), 'numeric') +
+        '</div><div class="field-grid field-grid--3">' +
         field('f-maxhr', 'Max HR', ex.max_hr, 'bpm', '', 'numeric') +
         field('f-cad', 'Cadence', ex.cadence_spm, 'spm', '', 'numeric') +
         field('f-cal', 'Calories', ex.calories, 'kcal', '', 'numeric') +
         '</div>' +
-        '<div class="field" style="margin-top:14px"><span class="field__label">How did it feel? <small class="muted">optional</small></span><div class="tagrow">' + ['Dehydrated','Felt unwell','Poor sleep','Hot / humid','Sore / niggle','Hilly route','Felt great'].map((x) => '<button type="button" class="chip" data-tag="' + x + '">' + x + '</button>').join('') + '</div><textarea class="textarea" id="f-notes" maxlength="250" rows="2" placeholder="Anything the coach should know about this run"></textarea></div>' +
-        '<div class="field" style="margin-top:14px"><label class="field__label" for="f-session">Count this run as</label><select class="select" id="f-session"></select><span class="field__hint" id="f-sess-hint"></span></div></div>' +
+        '<div class="sheet-sec"><label class="label" for="f-session">Count this run as</label><select class="select" id="f-session"></select><span class="field__hint" id="f-sess-hint"></span></div>' +
+        '<div class="sheet-sec"><span class="label">How did it feel? <span class="sheet-sec__opt">Optional</span></span><div class="tagrow">' + ['Felt great', 'Dehydrated', 'Felt unwell', 'Poor sleep', 'Hot / humid', 'Sore / niggle', 'Hilly route'].map((x) => '<button type="button" class="chip" data-tag="' + x + '">' + x + '</button>').join('') + '</div><textarea class="textarea" id="f-notes" maxlength="250" rows="2" placeholder="Anything else the coach should know"></textarea></div></div>' +
         '<div class="sheet__foot"><button class="btn btn--primary btn--block" id="confirm-run">Confirm &amp; update plan</button><button class="btn btn--text" data-act="log-back">Back</button></div>';
       fillSessionSelect(L.explicit ? L.preSession : (L.suggested || L.preSession));
     }
   }
 
+  const dateNice = (d) => (d ? F.dayShort(d) + ' ' + F.dateShort(d) + (d === todayStr() ? ' · Today' : '') : 'Pick a date');
   const dayDiff = (a, b) => Math.round((Date.parse(a) - Date.parse(b)) / 86400000);
 
   // Offers every open session from the last 14 days (missed ones are labelled) plus the next 3 days,
@@ -677,6 +670,7 @@
     }
     switch (t.dataset.act) {
       case 'log': { const s = S.summary.today_session; return startLog(s && s.status === 'planned' ? s.id : null); }
+      case 'expand-note': { const o = t.classList.toggle('is-open'); t.setAttribute('aria-expanded', o); return; }
       case 'settings': return openSettings();
       case 'streak': return toast(S.summary.streak.current + ' completed runs in a row. Best: ' + S.summary.streak.best);
       case 'manual': L.manual = true; L.ex = {}; L.step = 3; return renderLog();
@@ -688,6 +682,7 @@
 
   document.addEventListener('change', (e) => {
     if (e.target.id === 'shot') onShot(e.target.files);
+    if (e.target.id === 'f-date') { const sh = $('#f-date-show'); if (sh) sh.textContent = dateNice(e.target.value); }
     if (e.target.id === 'f-date') fillSessionSelect(($('#f-session') || {}).value || null);
     if (e.target.id === 'f-session') updateSessionHint();
   });
