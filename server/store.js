@@ -51,7 +51,8 @@ function sbHeaders(token, extra) {
 async function verifyToken(token) {
   if (!token) return null;
   const r = await fetch(SUPABASE_URL + '/auth/v1/user', { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + token } });
-  if (!r.ok) return null;
+  if (r.status === 401 || r.status === 403) return null; // token really is invalid or expired
+  if (!r.ok) { const e = new Error('Couldn’t reach the sign-in service. Try again in a moment.'); e.status = 503; throw e; }
   const u = await r.json();
   return u && u.id ? { id: u.id, email: (u.email || '').toLowerCase() } : null;
 }

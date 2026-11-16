@@ -25,13 +25,28 @@
     if (!r.ok) { const e = new Error(j.error_description || j.msg || j.message || 'Sign-in failed'); e.status = r.status; throw e; }
     return saveSession(j);
   }
+  // One refresh at a time (Supabase refresh tokens are single-use), and only forget the session when
+  // Supabase actually rejects it. A network blip keeps the session so the next call can try again.
+  let refreshing = null;
   async function freshToken(force) {
     let s = getSession();
     if (!s) return null;
-    if (force || s.expires_at - Math.floor(Date.now() / 1000) < 60) {
-      try { s = await sbToken('refresh_token', { refresh_token: s.refresh_token }); } catch (e) { store.del(SESSION_KEY); return null; }
+    if (!force && s.expires_at - Math.floor(Date.now() / 1000) >= 60) return s.access_token;
+    if (!refreshing) {
+      refreshing = sbToken('refresh_token', { refresh_token: s.refresh_token })
+        .then((ns) => ns.access_token)
+        .catch((e) => { if (e.status === 400 || e.status === 401) store.del(SESSION_KEY); return e.status ? null : s.access_token; })
+        .finally(() => { refreshing = null; });
     }
-    return s.access_token;
+    return refreshing;
+  }
+
+  // Set by the app: shows the sign-in sheet and resolves once you're signed in again.
+  let authWaiter = null;
+  function waitForSignIn() {
+    if (!API.onAuthRequired) return Promise.reject(new Error('Please sign in.'));
+    if (!authWaiter) authWaiter = API.onAuthRequired().finally(() => { authWaiter = null; });
+    return authWaiter;
   }
 
   async function request(method, url, body, isForm, retried) {
@@ -44,8 +59,11 @@
     const res = await fetch(url, { method, headers, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
     let data = null;
     try { data = await res.json(); } catch (e) { /* non-JSON */ }
-    if (res.status === 401 && cfg && cfg.auth === 'supabase' && !retried && getSession()) {
-      if (await freshToken(true)) return request(method, url, body, isForm, true);
+    if (res.status === 401 && cfg && cfg.auth === 'supabase' && retried !== 2) {
+      // 1st: try a forced token refresh. 2nd: ask you to sign in, then finish what you were doing.
+      if (!retried && getSession() && (await freshToken(true))) return request(method, url, body, isForm, 1);
+      await waitForSignIn();
+      return request(method, url, body, isForm, 2);
     }
     if (!res.ok) {
       const err = new Error((data && data.message) || 'Request failed (' + res.status + ')');

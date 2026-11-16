@@ -605,6 +605,13 @@
     const f = $(sb ? '#auth-email' : '#auth-pass'); if (f) f.focus();
   }
 
+  // When a sign-in expires mid-task, ask again and let the waiting request finish instead of failing.
+  let authResolve = null;
+  API.onAuthRequired = () => new Promise((resolve) => {
+    authResolve = resolve;
+    askAuth('Your sign-in expired. Sign in again and I’ll pick up where you left off.');
+  });
+
   async function doAuth() {
     const btn = $('#auth-go');
     btn.disabled = true;
@@ -612,6 +619,7 @@
       if (API.mode() === 'supabase') await API.signIn($('#auth-email').value.trim(), $('#auth-pass').value);
       else API.setPasscode($('#auth-pass').value);
       close('#ov-pass');
+      if (authResolve) { const r = authResolve; authResolve = null; r(); return; }
       init();
     } catch (e) {
       btn.disabled = false;

@@ -40,7 +40,7 @@ app.use('/api', async (req, res, next) => {
     next();
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'server_error', message: e.message || 'Something went wrong' });
+    res.status(e.status || 500).json({ error: e.status === 503 ? 'unavailable' : 'server_error', message: e.message || 'Something went wrong' });
   }
 });
 
