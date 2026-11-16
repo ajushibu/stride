@@ -68,6 +68,7 @@
     extract(files) { const f = new FormData(); [].concat(files).forEach((x) => f.append('image', x)); return request('POST', '/api/runs/extract', f, true); },
     logRun: (b) => request('POST', '/api/runs', b),
     deleteRun: (id) => request('DELETE', '/api/runs/' + encodeURIComponent(id)),
+    move: (id, date) => request('POST', '/api/sessions/' + encodeURIComponent(id) + '/move', { date }),
     skip: (id, reason) => request('POST', '/api/sessions/' + encodeURIComponent(id) + '/skip', { reason }),
     chat: (message) => request('POST', '/api/chat', { message }),
     clearChat: () => request('DELETE', '/api/chat'),

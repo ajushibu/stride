@@ -222,7 +222,7 @@
         case 'missed': dot = halfDot({ left: 'var(--magenta)', right: 'var(--track)' }); break;
         default: dot = '<span class="hdot hdot--rest"></span>';
       }
-      return '<div class="week__day' + (d.today ? ' is-today' : '') + ' is-' + (d.state || 'rest') + '" role="listitem"' + (d.label ? ' aria-label="' + esc(d.label) + '"' : '') + '>' + dot + '<span class="week__d">' + esc(d.d) + '</span>' + '<span class="week__km">' + (d.km != null ? esc(d.km) : '\u2013') + '</span>' + '</div>';
+      return '<div class="week__day' + (d.today ? ' is-today' : '') + ' is-' + (d.state || 'rest') + '" role="listitem"' + (d.sid ? ' data-sid="' + esc(d.sid) + '" tabindex="0"' : '') + (d.label ? ' aria-label="' + esc(d.label) + '"' : '') + '>' + dot + '<span class="week__d">' + esc(d.d) + '</span>' + '<span class="week__km">' + (d.km != null ? esc(d.km) : '\u2013') + '</span>' + '</div>';
     }).join('') + '</div>';
   }
 

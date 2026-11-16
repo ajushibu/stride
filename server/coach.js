@@ -180,6 +180,7 @@ function planContext(store, today) {
       pace: s.pace_lo ? `${secToPace(s.pace_lo)}-${secToPace(s.pace_hi)}` : null,
       hr_cap: s.hr_hi,
       status: s.status,
+      moved_by_runner_from: s.original_date || undefined,
     }));
   const runs = store.runs.slice(-10).map((r) => ({
     date: r.date,

@@ -103,7 +103,17 @@
       '<p class="run-hero__what">' + esc(done ? F.dateLong(s.date) : s.note) + '</p>' +
       '<div class="run-hero__meta">' + paceCell + hrCell + '</div>' +
       (done ? doneLine : '<div class="coach-note"><span class="avatar">' + I('sparkle') + '</span><p>' + why + '</p></div>') +
+      (lead && canMoveToday(s) ? '<button class="btn btn--primary btn--block hero-move" data-move="' + s.id + '" data-to="' + todayStr() + '">' + I('run', { size: 22 }) + 'Run it today instead</button>' : '') +
       '</article>';
+  }
+
+  // An upcoming planned session can be pulled to today when today has no run of its own.
+  function canMoveToday(s) {
+    const t = todayStr();
+    return s && s.status === 'planned' && s.type !== 'race' && s.date > t && dayDiff(s.date, t) <= 6 && !dayTaken(t, s.id);
+  }
+  function dayTaken(date, exceptId) {
+    return allSessions().some((x) => x.id !== exceptId && x.date === date && x.status !== 'skipped');
   }
 
   function weekStripHtml() {
@@ -128,7 +138,7 @@
         } else if (s.status === 'skipped' || date < t) state = 'missed';
         else state = 'planned';
       }
-      return { d, state, km, today: date === t, label: F.dayLong(date) + (s ? ', ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km, ' + s.status + extraLabel : ', rest') };
+      return { d, state, km, sid: s ? s.id : null, today: date === t, label: F.dayLong(date) + (s ? ', ' + F.typeLabel(s.type) + ' ' + F.km(s.km) + ' km, ' + s.status + extraLabel : ', rest') };
     });
     return '<div class="card card--pad-sm">' + UI.weekStrip(days) + '</div>';
   }
@@ -358,6 +368,15 @@
     const past = s.date < todayStr();
     const canAct = s.status === 'planned';
     const canLog = s.status === 'planned' && s.date <= F.addDays(todayStr(), 2);
+    const canMove = canAct && !past && s.type !== 'race';
+    const moveDays = canMove ? Array.from({ length: 7 }, (_, i) => F.addDays(todayStr(), i)) : [];
+    const moveHtml = canMove
+      ? '<div class="move-block"><span class="label">Move to</span><div class="tagrow">' + moveDays.map((d) => {
+          const cur = d === s.date, taken = !cur && dayTaken(d, s.id);
+          const name = d === todayStr() ? 'Today' : F.dayShort(d);
+          return '<button type="button" class="chip' + (cur ? ' is-selected' : '') + '"' + (cur || taken ? ' disabled' : ' data-move="' + s.id + '" data-to="' + d + '"') + ' aria-label="' + esc(F.dateLong(d) + (cur ? ', current day' : taken ? ', already has a run' : '')) + '">' + esc(name) + '</button>';
+        }).join('') + '</div>' + (s.original_date && s.original_date !== s.date ? '<span class="hint">Originally ' + esc(F.dayShort(s.original_date) + ' ' + F.dateShort(s.original_date)) + '.</span>' : '') + '</div>'
+      : '';
     const rows = [
       ['Date', F.dateLong(s.date)],
       ['Type', F.typeLabel(s.type)],
@@ -370,6 +389,7 @@
       '<div class="sheet__grab"></div><div class="sheet__head"><div><h2 class="sheet__title">' + esc(s.title || F.typeLabel(s.type)) + '</h2><p class="sheet__sub">Week ' + s.week + ' · ' + esc(s.phase) + (s.coach_edited ? ' · adjusted by coach' : '') + '</p></div><button class="icon-btn" data-close aria-label="Close">' + I('close') + '</button></div>' +
       '<div class="sheet__body"><div class="detail-list">' + rows.map((r) => '<div><span>' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>').join('') + '</div>' +
       '<p class="hint" style="margin-top:12px">' + esc(s.note || '') + '</p>' +
+      moveHtml +
       (run ? '<div class="card card--flat" style="margin-top:12px"><span class="label">Your run</span><div class="num num--sm" style="margin-top:6px">' + F.km(run.distance_km) + ' km · ' + F.pace(run.avg_pace_sec) + '/km' + (run.avg_hr ? ' · ' + run.avg_hr + ' bpm' : '') + '</div></div>' : '') +
       '</div><div class="sheet__foot">' +
       (canLog ? '<button class="btn btn--primary btn--block" data-sess-log="' + s.id + '">' + I('run', { size: 22 }) + (past ? 'I ran this on another day' : 'Log this run') + '</button>' : '') +
@@ -626,10 +646,22 @@
   document.addEventListener('click', async (e) => {
     const tg = e.target.closest && e.target.closest('.tagrow .chip');
     if (tg) { tg.classList.toggle('is-selected'); return; }
-    const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],#confirm-run,#save-settings,#chat-send,#auth-go');
+    const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],[data-move],#confirm-run,#save-settings,#chat-send,#auth-go');
     if (!t) return;
     if (t.dataset.tab) return go(t.dataset.tab);
     if (t.dataset.phaseToggle) { const ph = t.dataset.phaseToggle; if (openPhases.has(ph)) openPhases.delete(ph); else openPhases.add(ph); const y = window.scrollY; renderPlan(); window.scrollTo(0, y); return; }
+    if (t.dataset.move) {
+      if (t.disabled) return;
+      t.disabled = true;
+      try {
+        const r = await API.move(t.dataset.move, t.dataset.to);
+        S.plan = r.plan; S.summary = r.summary; close('#ov-session'); render();
+        toast(t.dataset.to === todayStr() ? 'Moved to today. Here’s your run.' : 'Moved to ' + F.dayShort(t.dataset.to));
+        if (r.warning) setTimeout(() => toast(r.warning), 1200);
+        if (t.dataset.to === todayStr()) { if (tab !== 'today') go('today'); else window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      } catch (err) { t.disabled = false; toast(err.message, 'error'); }
+      return;
+    }
     if (t.dataset.sid) return openSession(t.dataset.sid);
     if (t.dataset.chip) return sendChat(t.dataset.chip);
     if (t.hasAttribute('data-close')) { const ov = t.closest('.overlay'); if (ov) ov.classList.remove('is-open'); return; }

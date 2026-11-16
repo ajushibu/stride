@@ -207,6 +207,45 @@ app.post('/api/sessions/:id/skip', wrap(async (req, res) => {
   res.status(404).json({ error: 'not_found' });
 }));
 
+// Move an upcoming session to another free day in the next week (e.g. run Tuesday's run on Monday).
+const HARD = new Set(['tempo', 'intervals', 'long', 'race']);
+app.post('/api/sessions/:id/move', wrap(async (req, res) => {
+  const store = req.store, t = todayOf(store);
+  const to = String((req.body && req.body.date) || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) return res.status(400).json({ error: 'bad_date', message: 'Pick a day.' });
+  const weeks = store.plan.weeks;
+  const from = weeks.find((w) => w.sessions.some((x) => x.id === req.params.id));
+  const s = from && from.sessions.find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: 'not_found', message: 'Session not found.' });
+  if (s.status !== 'planned') return res.status(400).json({ error: 'not_planned', message: 'Only planned sessions can be moved.' });
+  if (s.type === 'race') return res.status(400).json({ error: 'race', message: 'Race day can’t be moved.' });
+  if (s.date < t) return res.status(400).json({ error: 'past', message: 'That session is in the past. Log it with the real date instead.' });
+  if (to < t || diffDays(t, to) > 6) return res.status(400).json({ error: 'range', message: 'You can move a session to any day in the next 7 days.' });
+  if (to === s.date) return res.json({ plan: store.plan, summary: summary(store, t) });
+  const all = weeks.flatMap((w) => w.sessions);
+  const clash = all.find((x) => x.id !== s.id && x.date === to && x.status !== 'skipped');
+  if (clash) return res.status(400).json({ error: 'taken', message: 'There’s already a run on that day.' });
+  const target = weeks.find((w) => to >= w.start && diffDays(w.start, to) < 7);
+  if (!target) return res.status(400).json({ error: 'range', message: 'That day is outside the plan.' });
+  let warning = null;
+  if (HARD.has(s.type)) {
+    const near = all.find((x) => x.id !== s.id && HARD.has(x.type) && x.status !== 'skipped' && Math.abs(diffDays(x.date, to)) <= 1);
+    if (near) warning = 'That puts two hard days back to back. Keep the easier one truly easy.';
+  }
+  const before = { ...s };
+  if (!s.original_date) s.original_date = s.date;
+  s.date = to;
+  if (s.original_date === s.date) delete s.original_date;
+  if (target !== from) { from.sessions = from.sessions.filter((x) => x.id !== s.id); target.sessions.push(s); }
+  for (const w of new Set([from, target])) {
+    w.sessions.sort((a, b) => a.date.localeCompare(b.date));
+    w.km = Math.round(w.sessions.filter((x) => x.status !== 'skipped').reduce((a, x) => a + x.km, 0) * 10) / 10;
+  }
+  store.changelog.push({ at: new Date().toISOString(), by_runner: true, applied: [{ id: s.id, before, after: { ...s } }] });
+  await db.save(store, req.ctx);
+  res.json({ plan: store.plan, summary: summary(store, t), warning });
+}));
+
 /* ---------- coach chat ---------- */
 app.post('/api/chat', wrap(async (req, res) => {
   const store = req.store;
