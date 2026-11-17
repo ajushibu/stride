@@ -18,6 +18,7 @@ const uid = (p) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).
 
 function freshState() {
   const profile = defaultProfile(todayIn('Asia/Calcutta'));
+  profile.onboarded = false; // new account: ask for their own race and fitness first
   return { profile, plan: generatePlan(profile), runs: [], chat: [], changelog: [] };
 }
 

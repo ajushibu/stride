@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const db = require('./store');
 const { uid } = db;
-const { generatePlan } = require('./plan');
+const { generatePlan, profileFromSetup } = require('./plan');
 const { todayIn, addDays, diffDays, mondayOf } = require('./dates');
 const { summary, allSessions } = require('./stats');
 const coach = require('./coach');
@@ -12,7 +12,8 @@ const coach = require('./coach');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const PASSCODE = process.env.APP_PASSCODE || ''; // file mode only
-const ALLOWED_EMAIL = (process.env.ALLOWED_EMAIL || '').trim().toLowerCase();
+// One or more emails, comma-separated: ALLOWED_EMAIL=me@x.com,friend@y.com
+const ALLOWED = (process.env.ALLOWED_EMAIL || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -29,8 +30,8 @@ app.use('/api', async (req, res, next) => {
       const m = /^Bearer (.+)$/.exec(req.get('authorization') || '');
       const user = await db.verifyToken(m && m[1]);
       if (!user) return res.status(401).json({ error: 'auth_required', message: 'Please sign in.' });
-      if (!ALLOWED_EMAIL) return res.status(500).json({ error: 'server_error', message: 'ALLOWED_EMAIL is not set on the server.' });
-      if (user.email !== ALLOWED_EMAIL) return res.status(403).json({ error: 'not_allowed', message: 'This account is not allowed.' });
+      if (!ALLOWED.length) return res.status(500).json({ error: 'server_error', message: 'ALLOWED_EMAIL is not set on the server.' });
+      if (!ALLOWED.includes(user.email)) return res.status(403).json({ error: 'not_allowed', message: 'This account is not allowed.' });
       req.ctx = { token: m[1], user };
     } else {
       if (PASSCODE && req.get('x-passcode') !== PASSCODE) return res.status(401).json({ error: 'auth_required', message: 'Passcode required.' });
@@ -61,18 +62,16 @@ const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
 });
 
 /* ---------- state ---------- */
-app.get('/api/state', wrap(async (req, res) => {
-  const store = req.store;
-  res.json({
-    profile: store.profile,
-    plan: store.plan,
-    runs: store.runs,
-    chat: store.chat.slice(-60),
-    summary: summary(store, todayOf(store)),
-    ai: { enabled: coach.hasKey(), model: coach.MODEL },
-    passcode_required: !!PASSCODE,
-  });
-}));
+const stateOf = (store) => ({
+  profile: store.profile,
+  plan: store.plan,
+  runs: store.runs,
+  chat: store.chat.slice(-60),
+  summary: summary(store, todayOf(store)),
+  ai: { enabled: coach.hasKey(), model: coach.MODEL },
+  passcode_required: !!PASSCODE,
+});
+app.get('/api/state', wrap(async (req, res) => res.json(stateOf(req.store))));
 
 /* ---------- profile / plan ---------- */
 app.put('/api/profile', wrap(async (req, res) => {
@@ -101,6 +100,39 @@ app.put('/api/profile', wrap(async (req, res) => {
   }
   await db.save(store, req.ctx);
   res.json({ profile: p, plan: store.plan, summary: summary(store, todayOf(store)) });
+}));
+
+// First sign-in on a new account: build the plan from the runner's own race and fitness.
+app.post('/api/setup', wrap(async (req, res) => {
+  const store = req.store, b = req.body || {}, t = todayOf(store);
+  const num = (v, lo, hi) => (Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : null);
+  const x = {
+    name: String(b.name || '').trim().slice(0, 40),
+    age: num(b.age, 14, 90),
+    race_name: String(b.race_name || '').trim().slice(0, 60) || 'My marathon',
+    race_date: /^\d{4}-\d{2}-\d{2}$/.test(b.race_date || '') ? b.race_date : null,
+    target_time_sec: num(b.target_time_sec, 2 * 3600, 7 * 3600),
+    longest_km: num(b.longest_km, 1, 42.2),
+    longest_time_min: num(b.longest_time_min, 4, 400),
+    weekly_km: num(b.weekly_km, 0, 150),
+    runs_per_week: num(b.runs_per_week, 2, 6),
+    max_hr: num(b.max_hr, 150, 225),
+    timezone: typeof b.timezone === 'string' ? b.timezone : null,
+  };
+  if (x.timezone) { try { new Intl.DateTimeFormat('en', { timeZone: x.timezone }); } catch { x.timezone = null; } }
+  const missing = ['age', 'race_date', 'target_time_sec', 'longest_km', 'longest_time_min', 'weekly_km', 'runs_per_week'].filter((k) => x[k] == null);
+  if (missing.length) return res.status(400).json({ error: 'bad_input', message: 'Check: ' + missing.join(', ').replace(/_/g, ' ') + '.' });
+  const pace = (x.longest_time_min * 60) / x.longest_km;
+  if (pace < 180 || pace > 900) return res.status(400).json({ error: 'bad_input', message: 'That run works out to an unusual pace. Check the distance and time.' });
+  const weeks = diffDays(t, x.race_date) / 7;
+  if (weeks < 12) return res.status(400).json({ error: 'too_soon', message: 'The race needs to be at least 12 weeks away to build a safe plan.' });
+  if (weeks > 80) return res.status(400).json({ error: 'too_far', message: 'Pick a race within the next 18 months.' });
+  if (store.runs.length) return res.status(400).json({ error: 'has_runs', message: 'This account already has runs. Change race details in Settings instead.' });
+  store.profile = profileFromSetup(store.profile, x, t);
+  store.plan = generatePlan(store.profile);
+  store.chat = []; store.changelog = [{ at: new Date().toISOString(), what: 'Plan built from first-time setup' }];
+  await db.save(store, req.ctx);
+  res.json(stateOf(store));
 }));
 
 /* ---------- run logging ---------- */

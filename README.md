@@ -26,7 +26,7 @@ Same setup as Margin and Recall. The data lives in Supabase (one private row per
 | `SUPABASE_URL` | Project URL |
 | `SUPABASE_PUBLISHABLE_KEY` | Publishable key. Safe to expose, row-level security does the locking |
 | `ANTHROPIC_API_KEY` | Claude API key. Server only |
-| `ALLOWED_EMAIL` | The one account allowed in |
+| `ALLOWED_EMAIL` | Accounts allowed in, comma-separated (`you@gmail.com,friend@gmail.com`) |
 
 - Deploy. Vercel only reads environment variables at deploy time, so after changing one, redeploy.
 
@@ -46,6 +46,14 @@ npm start            # http://localhost:3000
 With `SUPABASE_URL` unset, the app runs in file mode: data in `data/store.json`, no sign-in (set `APP_PASSCODE` to protect it). With the Supabase variables set it behaves exactly like the deployed version.
 
 Without `ANTHROPIC_API_KEY` the app still works with manual run entry and basic offline feedback. Screenshot reading, AI plan changes and chat need the key.
+
+## Adding a friend
+
+1. Supabase, Authentication, Users, Add user: their email and a password, tick Auto Confirm.
+2. Vercel, Settings, Environment Variables: add their email to `ALLOWED_EMAIL` (comma-separated), then Redeploy.
+3. Send them the link and password. On first sign-in Stride asks for their race, goal time and current fitness and builds their own plan. Their runs, plan and coach chat are a separate private row; neither of you can see the other's.
+
+Their screenshot reads, reviews and chat use your Anthropic key.
 
 ## Settings worth checking on day one
 

@@ -82,6 +82,7 @@
     signOut() { store.del(SESSION_KEY); },
     signedIn: () => !!getSession(),
     state: () => request('GET', '/api/state'),
+    setup: (b) => request('POST', '/api/setup', b),
     saveProfile: (b) => request('PUT', '/api/profile', b),
     extract(files) { const f = new FormData(); [].concat(files).forEach((x) => f.append('image', x)); return request('POST', '/api/runs/extract', f, true); },
     logRun: (b) => request('POST', '/api/runs', b),

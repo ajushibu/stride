@@ -577,6 +577,47 @@
     open('#ov-settings');
   }
 
+  /* ---- first sign-in on a new account: their own race and starting fitness ---- */
+  function openSetup() {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const fld = (id, label, attrs, hint) => '<div class="field"><label class="field__label" for="' + id + '">' + label + '</label><input class="input" id="' + id + '" ' + attrs + ' autocomplete="off">' + (hint ? '<span class="field__hint">' + hint + '</span>' : '') + '</div>';
+    $('#setup-sheet').innerHTML =
+      '<div class="sheet__head"><div><h2 class="sheet__title">Welcome to Stride</h2><p class="sheet__sub">Tell me about your race and where you are now. I’ll build your plan from this.</p></div></div>' +
+      '<div class="sheet__body"><div class="stack">' +
+      '<span class="label">You</span>' +
+      '<div class="field-row">' + fld('su-name', 'First name', 'maxlength="40"') + fld('su-age', 'Age', 'inputmode="numeric" maxlength="2"') + '</div>' +
+      '<span class="label setup-sec">Your race</span>' +
+      fld('su-race', 'Race', 'value="Melbourne Marathon" maxlength="60"') +
+      '<div class="field-row">' + fld('su-date', 'Race date', 'type="date" min="' + F.addDays(todayStr(), 84) + '"') + fld('su-target', 'Goal time (h:mm)', 'inputmode="numeric" placeholder="4:30"') + '</div>' +
+      '<span class="label setup-sec">Where you are now</span>' +
+      '<div class="field-row">' + fld('su-long', 'Longest recent run (km)', 'inputmode="decimal" placeholder="10"') + fld('su-longt', 'It took (minutes)', 'inputmode="numeric" placeholder="70"') + '</div>' +
+      fld('su-week', 'Km per week lately', 'inputmode="decimal" placeholder="20"', 'An honest average of the last month. 0 is fine.') +
+      '<div class="field"><span class="field__label">Runs per week you can do</span><div class="tagrow" id="su-rpw">' + [2, 3, 4, 5].map((n) => '<button type="button" class="chip' + (n === 3 ? ' is-selected' : '') + '" data-rpw="' + n + '">' + n + '</button>').join('') + '</div></div>' +
+      fld('su-max', 'Max heart rate (optional)', 'inputmode="numeric" placeholder="Leave blank if unsure"', 'Blank is fine: I’ll estimate it from your age.') +
+      '</div></div><div class="sheet__foot"><button class="btn btn--primary btn--block" id="setup-go">Build my plan</button></div>';
+    S.__tz = tz;
+    open('#ov-setup');
+  }
+
+  async function saveSetup() {
+    const v = (id) => ($(id).value || '').trim();
+    const tt = v('#su-target').split(/[:.]/).map(Number);
+    const sel = $('#su-rpw .chip.is-selected');
+    const body = {
+      name: v('#su-name'), age: +v('#su-age'), race_name: v('#su-race'), race_date: v('#su-date'),
+      target_time_sec: tt.length > 1 && tt.every(Number.isFinite) ? tt[0] * 3600 + tt[1] * 60 : NaN,
+      longest_km: parseFloat(v('#su-long')), longest_time_min: parseFloat(v('#su-longt')),
+      weekly_km: parseFloat(v('#su-week')), runs_per_week: sel ? +sel.dataset.rpw : 3,
+      max_hr: v('#su-max') ? +v('#su-max') : null, timezone: S.__tz,
+    };
+    const btn = $('#setup-go'); btn.disabled = true; btn.textContent = 'Building…';
+    try {
+      S = await API.setup(body);
+      close('#ov-setup'); render();
+      toast('Your plan is ready. First run: ' + (S.summary.today_session ? 'today' : F.dayShort((S.summary.next_session || {}).date || todayStr())));
+    } catch (e) { btn.disabled = false; btn.textContent = 'Build my plan'; toast(e.message, 'error'); }
+  }
+
   async function saveSettings() {
     const v = (id) => $(id).value.trim();
     const tt = v('#s-target').split(':').map(Number);
@@ -645,6 +686,9 @@
   }
 
   document.addEventListener('click', async (e) => {
+    const rp = e.target.closest && e.target.closest('#su-rpw .chip');
+    if (rp) { document.querySelectorAll('#su-rpw .chip').forEach((c) => c.classList.toggle('is-selected', c === rp)); return; }
+    if (e.target.closest && e.target.closest('#setup-go')) return saveSetup();
     const tg = e.target.closest && e.target.closest('.tagrow .chip');
     if (tg) { tg.classList.toggle('is-selected'); return; }
     const t = e.target.closest('[data-tab],[data-act],[data-close],[data-sid],[data-phase-toggle],[data-chip],[data-sess-log],[data-sess-skip],[data-move],#confirm-run,#save-settings,#chat-send,#auth-go');
@@ -710,7 +754,7 @@
     if (e.key === 'Enter' && e.target.id === 'chat-input') { const v = e.target.value; e.target.value = ''; sendChat(v); }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.sid) { e.preventDefault(); openSession(e.target.dataset.sid); }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.phaseToggle) { e.preventDefault(); e.target.click(); }
-    if (e.key === 'Escape') document.querySelectorAll('.overlay.is-open').forEach((o) => { if (o.id !== 'ov-pass') o.classList.remove('is-open'); });
+    if (e.key === 'Escape') document.querySelectorAll('.overlay.is-open').forEach((o) => { if (o.id !== 'ov-pass' && o.id !== 'ov-setup') o.classList.remove('is-open'); });
   });
 
   // drag and drop onto the dropzone
@@ -732,6 +776,7 @@
     const h = location.hash.slice(1);
     if (TABS.includes(h)) tab = h;
     render();
+    if (S.profile && S.profile.onboarded === false) openSetup();
   }
 
   document.addEventListener('visibilitychange', async () => {

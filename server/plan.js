@@ -57,7 +57,7 @@ function generatePlan(profile) {
     const phase = phaseOf(w, n);
     const wkStart = addDays(start, (w - 1) * 7);
     const cutback = w % 4 === 0 && w < buildEnd - 1 && phase !== 'Taper';
-    const runs = w < 13 ? 3 : 4;
+    const runs = w < 13 && (profile.baseline.runs_per_week || 3) < 4 ? 3 : 4;
 
     // weekly volume
     let km;
@@ -74,7 +74,8 @@ function generatePlan(profile) {
     else if (phase === 'Taper') long = w === n - 2 ? 18 : 12;
     else {
       const prog = Math.min(1, (w - 1) / Math.max(1, buildEnd - 4));
-      long = 11 + (32 - 11) * prog;
+      const longStart = Math.min(11, Math.max(5, (profile.baseline.longest_km || 10) + 1));
+      long = longStart + (32 - longStart) * prog;
       if (cutback) long *= 0.75;
       long = Math.min(long, 32, km * (runs === 3 ? 0.47 : 0.56));
     }
@@ -177,4 +178,22 @@ function generatePlan(profile) {
   return { generated_at: new Date().toISOString(), weeks };
 }
 
-module.exports = { generatePlan, defaultProfile, MARATHON_KM };
+// First-time setup: turn what a new runner tells us into a profile. Paces come from a recent
+// comfortable run (easy = 15-45 s/km slower), HR targets from age (Tanaka max HR).
+function profileFromSetup(base, x, today) {
+  const p = { ...base, baseline: { ...base.baseline }, paces: { ...base.paces }, hr: { ...base.hr } };
+  p.name = x.name; p.age = x.age; p.timezone = x.timezone || p.timezone;
+  p.race_name = x.race_name; p.race_date = x.race_date;
+  p.target_time_sec = x.target_time_sec; p.floor_time_sec = x.target_time_sec + 30 * 60;
+  p.plan_start = today;
+  p.baseline = { longest_km: x.longest_km, longest_time_min: x.longest_time_min, weekly_km: x.weekly_km, runs_per_week: x.runs_per_week, easy_hr_seen: null };
+  const recent = Math.round((x.longest_time_min * 60) / x.longest_km);
+  p.paces = { easy_lo: recent + 15, easy_hi: recent + 45, tempo: recent - 20 };
+  const max = x.max_hr || Math.round(208 - 0.7 * x.age);
+  p.max_hr = x.max_hr || null;
+  p.hr = { easy_cap: Math.round(max * 0.75), tempo_lo: Math.round(max * 0.82), tempo_hi: Math.round(max * 0.87) };
+  p.onboarded = true;
+  return p;
+}
+
+module.exports = { generatePlan, defaultProfile, profileFromSetup, MARATHON_KM };

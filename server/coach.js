@@ -156,8 +156,7 @@ const UPDATE_PLAN = {
   },
 };
 
-const SYSTEM = `You are the running coach inside Stride, a personal marathon-training app. The runner is a 27-year-old first-time marathoner (Melbourne Marathon, target about 4:30, safe floor 5:00).
-Rules:
+const RULES = `Rules:
 - Be honest and specific. Do not flatter. If a run was too fast, too hard, or too short, say so plainly.
 - Easy runs are controlled by heart rate: if average HR on an easy run was above the cap, the next easy runs should be slower, not shorter by default.
 - Never raise weekly volume more than ~10% over the previous non-cutback week and never add intensity after a missed or poor-recovery week.
@@ -166,6 +165,15 @@ Rules:
 - Pain, dizziness, chest symptoms or a sharp pain that changes gait: tell the runner to stop running and see a doctor/physio, and put it in flags.
 - Runner comments (runner_comment / notes on a run, e.g. dehydrated, ill, poor sleep, heat, sore) are context from the runner. Weigh them honestly: a run affected by dehydration, illness, heat or poor sleep is weaker evidence about fitness, so do not cut the plan or slow paces on that run alone, but do mention it, and if the same excuse keeps recurring say so plainly. Illness or pain still follows the safety rule below. Never let a comment excuse a pacing mistake that is not explained by it.
 - You are not a doctor. Keep notes short. Pace is in min:sec per km.`;
+
+// Who the runner is comes from their own profile, so each account gets its own coach.
+function systemFor(store) {
+  const p = store.profile, b = p.baseline || {};
+  const who = (p.name ? p.name + ', a ' : 'A ') + (p.age ? p.age + '-year-old ' : '') + 'runner training for ' + (p.race_name || 'a marathon') +
+    ' (target about ' + secToHMS(p.target_time_sec) + ', safe floor ' + secToHMS(p.floor_time_sec || p.target_time_sec + 1800) + ')' +
+    '. Starting point when the plan was made: longest run ' + (b.longest_km || '?') + ' km, about ' + (b.weekly_km || '?') + ' km a week over ' + (b.runs_per_week || 3) + ' runs.';
+  return 'You are the running coach inside Stride, a personal marathon-training app. The runner: ' + who + '\n' + RULES;
+}
 
 function planContext(store, today) {
   const upcoming = allSessions(store.plan)
@@ -283,7 +291,7 @@ async function reviewRun(store, today, run) {
   const tool = await callTool({
     model: MODEL,
     max_tokens: 2048,
-    system: SYSTEM,
+    system: systemFor(store),
     tools: [UPDATE_PLAN],
     messages: [
       {
@@ -335,7 +343,7 @@ async function chat(store, today, history, userText) {
   if (messages.length && messages[messages.length - 1].role === 'user') messages[messages.length - 1].content += '\n' + userText;
   else messages.push({ role: 'user', content: userText });
   const system =
-    SYSTEM +
+    systemFor(store) +
     `\nYou are chatting with the runner. Answer in at most ~120 words unless they ask for detail. ` +
     `Always write a text reply to the runner. If they ask for a plan change (travel, illness, soreness, time constraints, a missed week), also call update_plan with the minimal justified change (an empty session_changes list is fine) and explain it in your text. ` +
     `If it is only a question, just answer.\n\nCURRENT STATE:\n${JSON.stringify(ctx)}`;
@@ -357,4 +365,5 @@ async function chat(store, today, history, userText) {
 }
 
 module.exports = {
-  mergeSegments, extractRun, reviewRun, fallbackReview, applyChanges, chat, hasKey, MODEL };
+  mergeSegments,
+  systemFor, extractRun, reviewRun, fallbackReview, applyChanges, chat, hasKey, MODEL };
